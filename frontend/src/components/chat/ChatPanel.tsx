@@ -1,0 +1,257 @@
+import {
+  Bot, Headphones, Mic, MicOff, RotateCcw, Send, Sparkles, UserCog,
+} from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+
+import { MessageBubble } from './MessageBubble'
+import { VoiceCall } from './VoiceCall'
+import { Button } from '@/components/ui'
+import {
+  SpeechRecognizer, isRecognitionSupported, isSynthesisSupported, speak, stopSpeaking, toSpeakable,
+} from '@/lib/speech'
+import { cn, titleCase } from '@/lib/utils'
+import { useChat } from '@/store/chat'
+
+const GREETING =
+  "Hi! I'm **Aura**, your NovaMart assistant. I can track an order, start a return, " +
+  'check stock or answer a policy question. What can I help you with?'
+
+interface ChatPanelProps {
+  /** `page` fills its container; `widget` is the floating storefront bubble. */
+  variant?: 'page' | 'widget'
+  className?: string
+}
+
+export function ChatPanel({ variant = 'page', className }: ChatPanelProps) {
+  const {
+    messages, suggestions, stage, activeTool, escalated,
+    send, greet, requestHuman, reset, error,
+  } = useChat()
+
+  const [draft, setDraft] = useState('')
+  const [dictating, setDictating] = useState(false)
+  const [interim, setInterim] = useState('')
+  const [speakReplies, setSpeakReplies] = useState(false)
+  const [callOpen, setCallOpen] = useState(false)
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const recognizerRef = useRef<SpeechRecognizer | null>(null)
+  const spokenRef = useRef<string | null>(null)
+
+  useEffect(() => greet(GREETING), [greet])
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+  }, [messages, stage])
+
+  // Read the newest assistant reply aloud when "speak replies" is on.
+  useEffect(() => {
+    if (!speakReplies || !isSynthesisSupported()) return
+    const last = messages[messages.length - 1]
+    if (!last || last.role !== 'assistant' || last.id === spokenRef.current) return
+    spokenRef.current = last.id
+    void speak(toSpeakable(last.content))
+  }, [messages, speakReplies])
+
+  useEffect(() => () => {
+    recognizerRef.current?.abort()
+    stopSpeaking()
+  }, [])
+
+  const busy = stage !== 'idle'
+
+  async function submit(text: string) {
+    const value = text.trim()
+    if (!value || busy) return
+    setDraft('')
+    setInterim('')
+    await send(value)
+    inputRef.current?.focus()
+  }
+
+  function toggleDictation() {
+    if (dictating) {
+      recognizerRef.current?.stop()
+      setDictating(false)
+      return
+    }
+    const recognizer = new SpeechRecognizer('en-IN')
+    recognizerRef.current = recognizer
+    const started = recognizer.start({
+      onPartial: setInterim,
+      onFinal: (text) => {
+        setInterim('')
+        setDraft((current) => (current ? `${current} ${text}` : text))
+      },
+      onEnd: () => setDictating(false),
+      onError: () => setDictating(false),
+    })
+    setDictating(started)
+  }
+
+  const stageLabel =
+    stage === 'using_tool' && activeTool
+      ? `Checking ${titleCase(activeTool).toLowerCase()}…`
+      : stage === 'writing'
+        ? 'Writing a reply…'
+        : 'Thinking…'
+
+  return (
+    <div
+      className={cn(
+        'flex min-h-0 flex-col overflow-hidden bg-ink-50',
+        variant === 'page' ? 'h-full rounded-xl border border-ink-200' : 'h-full',
+        className,
+      )}
+    >
+      {/* Header */}
+      <header className="flex items-center justify-between gap-3 border-b border-ink-200 bg-white px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="relative">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-600 text-white">
+              <Bot className="h-5 w-5" />
+            </div>
+            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-ink-900">Aura · NovaMart Support</p>
+            <p className="text-xs text-ink-500">
+              {escalated ? 'Human agent joining…' : 'Online · replies in seconds'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1">
+          {isSynthesisSupported() && (
+            <Button
+              size="icon"
+              variant="ghost"
+              title={speakReplies ? 'Turn off spoken replies' : 'Read replies aloud'}
+              onClick={() => {
+                stopSpeaking()
+                setSpeakReplies((v) => !v)
+              }}
+              className={cn(speakReplies && 'bg-brand-50 text-brand-700')}
+            >
+              <Headphones className="h-4 w-4" />
+            </Button>
+          )}
+          <Button
+            size="icon"
+            variant="ghost"
+            title="Start a voice call"
+            onClick={() => setCallOpen(true)}
+          >
+            <Mic className="h-4 w-4" />
+          </Button>
+          <Button size="icon" variant="ghost" title="New conversation" onClick={reset}>
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        </div>
+      </header>
+
+      {/* Transcript */}
+      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto scroll-thin px-4 py-4">
+        {messages.map((message) => (
+          <MessageBubble key={message.id} message={message} />
+        ))}
+
+        {busy && (
+          <div className="flex items-center gap-3 animate-fade-up">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-white">
+              <Bot className="h-4 w-4" />
+            </div>
+            <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-ink-200 bg-white px-4 py-3">
+              <span className="flex gap-1" aria-hidden>
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className="h-1.5 w-1.5 animate-blink rounded-full bg-brand-500"
+                    style={{ animationDelay: `${i * 0.18}s` }}
+                  />
+                ))}
+              </span>
+              <span className="text-xs text-ink-500">{stageLabel}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Composer */}
+      <div className="border-t border-ink-200 bg-white px-4 py-3">
+        {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+
+        {suggestions.length > 0 && !busy && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {suggestions.slice(0, 3).map((suggestion) => (
+              <button
+                key={suggestion}
+                onClick={() => submit(suggestion)}
+                className="inline-flex items-center gap-1 rounded-full border border-ink-200 bg-white px-3 py-1 text-xs font-medium text-ink-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+              >
+                <Sparkles className="h-3 w-3" />
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-end gap-2">
+          <div className="relative flex-1">
+            <textarea
+              ref={inputRef}
+              rows={1}
+              value={dictating && interim ? `${draft} ${interim}`.trim() : draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault()
+                  void submit(draft)
+                }
+              }}
+              placeholder={dictating ? 'Listening…' : 'Ask about an order, return or product…'}
+              disabled={busy}
+              className="input max-h-32 min-h-[42px] resize-none py-2.5 pr-10"
+            />
+            {isRecognitionSupported() && (
+              <button
+                onClick={toggleDictation}
+                title={dictating ? 'Stop dictation' : 'Dictate a message'}
+                className={cn(
+                  'absolute bottom-2 right-2 rounded-md p-1.5 transition',
+                  dictating
+                    ? 'bg-red-100 text-red-600'
+                    : 'text-ink-400 hover:bg-ink-100 hover:text-ink-700',
+                )}
+              >
+                {dictating ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              </button>
+            )}
+          </div>
+
+          <Button
+            size="icon"
+            onClick={() => submit(draft)}
+            disabled={busy || !draft.trim()}
+            title="Send"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {!escalated && (
+          <button
+            onClick={() => void requestHuman()}
+            className="mt-2 inline-flex items-center gap-1.5 text-xs text-ink-500 transition hover:text-brand-700"
+          >
+            <UserCog className="h-3.5 w-3.5" />
+            Talk to a human agent
+          </button>
+        )}
+      </div>
+
+      <VoiceCall open={callOpen} onClose={() => setCallOpen(false)} />
+    </div>
+  )
+}

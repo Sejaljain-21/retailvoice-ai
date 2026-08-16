@@ -1,0 +1,62 @@
+# ---------------------------------------------------------------- secrets --
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ----------------------------------------------------------------- python --
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+eggs/
+*.egg-info/
+.installed.cfg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# --------------------------------------------------------------- database --
+*.db
+*.sqlite
+*.sqlite3
+backend/retailvoice.db
+backend/tests/test_retailvoice.db
+
+# ------------------------------------------------------------------- node --
+node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# --------------------------------------------------------------- tooling ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ------------------------------------------------------------------ media --
+# Generated TTS audio and uploaded recordings
+backend/media/
+*.wav.tmp
+
+# ------------------------------------------------------------------ misc ---
+*.log
+.cache/

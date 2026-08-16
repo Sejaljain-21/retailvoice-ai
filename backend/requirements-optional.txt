@@ -1,0 +1,13 @@
+# ---------------------------------------------------------------------------
+# Optional heavy providers. Install only if you want fully local speech / ML.
+#   pip install -r requirements-optional.txt
+# ---------------------------------------------------------------------------
+
+# Local speech-to-text (CTranslate2 Whisper). ~150 MB model download on first run.
+faster-whisper==1.1.0
+
+# Local offline text-to-speech (uses OS voices: SAPI5 on Windows, NSSpeech on macOS)
+pyttsx3==2.98
+
+# Higher quality local sentence embeddings for the RAG index (~90 MB download).
+sentence-transformers==3.3.1
