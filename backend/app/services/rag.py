@@ -137,14 +137,33 @@ async def reindex_all(db: AsyncSession) -> dict[str, object]:
 # ---------------------------------------------------------------------------
 # Retrieval
 # ---------------------------------------------------------------------------
+# Whether to weight lexical matches by inverse document frequency.
+#
+# MEASURED, not assumed. On the 30-question labelled set in `evaluate.py`,
+# against this 14-article knowledge base:
+#
+#     uniform coverage   P@1 80.0 %   R@3 100 %   MRR 0.900   <- shipped
+#     chunk-level IDF    P@1 76.7 %   R@3 100 %   MRR 0.878
+#     document-level IDF P@1 76.7 %   R@3 100 %   MRR 0.883
+#
+# IDF is the textbook choice and it is genuinely needed at scale, but with 14
+# documents there is nothing for it to estimate - almost every content term is
+# "rare", so the weights amplify chunking accidents rather than real term
+# rarity. Turn this on when the corpus reaches a few hundred articles and
+# re-run `python evaluate.py` to confirm it has started paying for itself.
+USE_IDF_WEIGHTING = False
+
+
 def _idf_weights(query_tokens: set[str], corpus: list[set[str]]) -> dict[str, float]:
     """Inverse document frequency over the candidate set.
 
-    This is what makes hybrid search pick the right article: in "refund policy
-    for UPI", the word `upi` appears in one article and `policy` in half of
-    them, so `upi` must count for far more. Without IDF a short query is
-    dominated by its most common word.
+    Rare query terms should dominate: in "refund policy for UPI", `upi` appears
+    in one article and `policy` in half of them. See `USE_IDF_WEIGHTING` for why
+    this is currently disabled.
     """
+    if not USE_IDF_WEIGHTING:
+        return {token: 1.0 for token in query_tokens}
+
     n = len(corpus) or 1
     weights: dict[str, float] = {}
     for token in query_tokens:

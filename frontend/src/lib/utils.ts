@@ -33,22 +33,33 @@ export function formatTime(value?: string | null): string {
   })
 }
 
+/** Thresholds in seconds, paired with the unit they convert to. */
+const AGO_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+  ['year', 365 * 24 * 3600],
+  ['month', 30 * 24 * 3600],
+  ['week', 7 * 24 * 3600],
+  ['day', 24 * 3600],
+  ['hour', 3600],
+  ['minute', 60],
+]
+
 export function timeAgo(value?: string | null): string {
   if (!value) return '—'
-  const seconds = Math.round((Date.now() - new Date(value).getTime()) / 1000)
-  if (seconds < 60) return 'just now'
-  const steps: Array<[number, Intl.RelativeTimeFormatUnit]> = [
-    [60, 'minute'], [24, 'hour'], [7, 'day'], [4.35, 'week'], [12, 'month'],
-  ]
-  let value_ = seconds / 60
-  let unit: Intl.RelativeTimeFormatUnit = 'minute'
-  for (let i = 1; i < steps.length; i += 1) {
-    if (Math.abs(value_) < steps[i][0]) break
-    value_ /= steps[i][0]
-    unit = steps[i][1]
+  const then = new Date(value).getTime()
+  if (Number.isNaN(then)) return '—'
+
+  const seconds = (Date.now() - then) / 1000
+  const magnitude = Math.abs(seconds)
+  if (magnitude < 45) return seconds >= 0 ? 'just now' : 'in a moment'
+
+  const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+  for (const [unit, unitSeconds] of AGO_UNITS) {
+    if (magnitude >= unitSeconds) {
+      // Negative = past, which is what RelativeTimeFormat expects.
+      return formatter.format(-Math.round(seconds / unitSeconds), unit)
+    }
   }
-  return new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
-    .format(-Math.round(value_), unit)
+  return formatter.format(-Math.round(seconds), 'second')
 }
 
 export function titleCase(value?: string | null): string {

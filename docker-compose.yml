@@ -1,0 +1,79 @@
+# =============================================================================
+# RetailVoice AI - full stack
+#
+#   docker compose up --build                 # SQLite, zero configuration
+#   docker compose --profile postgres up -d   # with PostgreSQL instead
+#
+# Frontend  -> http://localhost:3000
+# API docs  -> http://localhost:8000/docs
+# =============================================================================
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: retailvoice-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      SEED_ON_STARTUP: "true"
+      # Override at run time, e.g. `SECRET_KEY=... docker compose up`
+      SECRET_KEY: ${SECRET_KEY:-change-me-please-use-a-long-random-string}
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      # Leave the key empty to run the offline rule-based planner.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+      STT_PROVIDER: ${STT_PROVIDER:-browser}
+      TTS_PROVIDER: ${TTS_PROVIDER:-browser}
+      DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////app/data/retailvoice.db}
+    volumes:
+      - backend-data:/app/data
+    networks:
+      - retailvoice
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: retailvoice-web
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - retailvoice
+
+  # --------------------------------------------------------------- optional --
+  postgres:
+    image: postgres:16-alpine
+    container_name: retailvoice-db
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: retailvoice
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-retailvoice}
+      POSTGRES_DB: retailvoice
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U retailvoice"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - retailvoice
+
+volumes:
+  backend-data:
+  postgres-data:
+
+networks:
+  retailvoice:
+    driver: bridge
