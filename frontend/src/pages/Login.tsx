@@ -58,7 +58,7 @@ export function Login() {
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600 text-white">
             <Bot className="h-5 w-5" />
           </div>
-          <span className="text-lg font-bold text-white">RetailVoice AI</span>
+          <span className="text-lg font-bold text-white">Retail Voice</span>
         </div>
 
         <div className="relative max-w-md">
@@ -102,7 +102,7 @@ export function Login() {
             <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600 text-white">
               <Bot className="h-5 w-5" />
             </div>
-            <h1 className="text-xl font-bold text-ink-900">RetailVoice AI</h1>
+            <h1 className="text-xl font-bold text-ink-900">Retail Voice</h1>
           </div>
 
           <Card className="p-6">

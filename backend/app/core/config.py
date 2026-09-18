@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     )
 
     # ----- Application ------------------------------------------------------
-    APP_NAME: str = "RetailVoice AI"
+    APP_NAME: str = "Retail Voice"
     APP_ENV: Literal["development", "staging", "production", "test"] = "development"
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = True
@@ -41,9 +41,14 @@ class Settings(BaseSettings):
     DB_ECHO: bool = False
 
     # ----- LLM provider -----------------------------------------------------
-    # "anthropic" -> real Claude calls; "mock" -> deterministic offline agent.
-    # "auto" picks anthropic when ANTHROPIC_API_KEY is present, else mock.
-    LLM_PROVIDER: Literal["auto", "anthropic", "mock"] = "auto"
+    # "gemini" -> Google Gemini (free tier), "groq" -> Groq Llama 3 (free tier),
+    # "anthropic" -> Claude calls, "mock" -> deterministic offline agent.
+    # "auto" picks gemini > groq > anthropic when key is present, else mock.
+    LLM_PROVIDER: Literal["auto", "gemini", "groq", "anthropic", "mock"] = "auto"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-flash-lite-latest"
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "openai/gpt-oss-20b"
     ANTHROPIC_API_KEY: str = ""
     LLM_MODEL: str = "claude-sonnet-5"
     LLM_FALLBACK_MODEL: str = "claude-haiku-4-5-20251001"
@@ -110,7 +115,13 @@ class Settings(BaseSettings):
     def resolved_llm_provider(self) -> str:
         if self.LLM_PROVIDER != "auto":
             return self.LLM_PROVIDER
-        return "anthropic" if self.ANTHROPIC_API_KEY.strip() else "mock"
+        if self.GEMINI_API_KEY.strip():
+            return "gemini"
+        if self.GROQ_API_KEY.strip():
+            return "groq"
+        if self.ANTHROPIC_API_KEY.strip():
+            return "anthropic"
+        return "mock"
 
     @field_validator("CORS_ORIGINS")
     @classmethod

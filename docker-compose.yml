@@ -1,5 +1,5 @@
 # =============================================================================
-# RetailVoice AI - full stack
+# Retail Voice - full stack
 #
 #   docker compose up --build                 # SQLite, zero configuration
 #   docker compose --profile postgres up -d   # with PostgreSQL instead

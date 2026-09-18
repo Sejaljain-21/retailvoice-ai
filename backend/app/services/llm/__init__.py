@@ -38,13 +38,70 @@ __all__ = [
 @lru_cache
 def get_llm() -> BaseLLMProvider:
     provider = settings.resolved_llm_provider
-    if provider == "anthropic":
-        try:
-            from app.services.llm.anthropic_provider import AnthropicProvider
+    available: list[BaseLLMProvider] = []
 
-            log.info("LLM provider: Anthropic (%s)", settings.LLM_MODEL)
-            return AnthropicProvider()
-        except Exception as exc:
-            log.warning("Falling back to the mock planner - %s", exc)
-    log.info("LLM provider: mock rule-based planner (no API key configured)")
-    return MockProvider()
+    def try_add_gemini() -> None:
+        if settings.GEMINI_API_KEY.strip():
+            try:
+                from app.services.llm.openai_compatible_provider import GeminiProvider
+
+                available.append(GeminiProvider())
+                log.info("Loaded LLM provider: Google Gemini (%s)", settings.GEMINI_MODEL)
+            except Exception as exc:
+                log.warning("Failed initializing GeminiProvider: %s", exc)
+
+    def try_add_groq() -> None:
+        if settings.GROQ_API_KEY.strip():
+            try:
+                from app.services.llm.openai_compatible_provider import GroqProvider
+
+                available.append(GroqProvider())
+                log.info("Loaded LLM provider: Groq (%s)", settings.GROQ_MODEL)
+            except Exception as exc:
+                log.warning("Failed initializing GroqProvider: %s", exc)
+
+    def try_add_anthropic() -> None:
+        if settings.ANTHROPIC_API_KEY.strip():
+            try:
+                from app.services.llm.anthropic_provider import AnthropicProvider
+
+                available.append(AnthropicProvider())
+                log.info("Loaded LLM provider: Anthropic (%s)", settings.LLM_MODEL)
+            except Exception as exc:
+                log.warning("Failed initializing AnthropicProvider: %s", exc)
+
+    if provider == "gemini":
+        try_add_gemini()
+        try_add_groq()
+        try_add_anthropic()
+    elif provider == "groq":
+        try_add_groq()
+        try_add_gemini()
+        try_add_anthropic()
+    elif provider == "anthropic":
+        try_add_anthropic()
+        try_add_gemini()
+        try_add_groq()
+    else:
+        # Default / auto: Gemini primary if configured, Groq as fallback
+        try_add_gemini()
+        try_add_groq()
+        try_add_anthropic()
+
+    if not available or provider == "mock":
+        log.info("LLM provider: mock rule-based planner")
+        return MockProvider()
+
+    # Always append MockProvider as safety net at the end of the chain
+    available.append(MockProvider())
+
+    if len(available) == 1:
+        return available[0]
+
+    from app.services.llm.fallback_provider import FallbackProvider
+
+    log.info(
+        "LLM provider active with fallback chain: %s",
+        " -> ".join(p.name for p in available),
+    )
+    return FallbackProvider(available)

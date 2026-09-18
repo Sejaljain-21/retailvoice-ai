@@ -264,7 +264,7 @@ async def evaluate_agent(verbose: bool = True) -> AgentEvalResult:
 # Entry point
 # ---------------------------------------------------------------------------
 async def main() -> int:
-    parser = argparse.ArgumentParser(description="RetailVoice AI evaluation harness")
+    parser = argparse.ArgumentParser(description="Retail Voice evaluation harness")
     parser.add_argument("--suite", choices=["rag", "agent", "all"], default="all")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     args = parser.parse_args()

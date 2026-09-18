@@ -31,6 +31,7 @@ class ToolUse:
     id: str
     name: str
     input: dict[str, Any] = field(default_factory=dict)
+    extra_content: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)

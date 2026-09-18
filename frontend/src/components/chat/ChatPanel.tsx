@@ -4,7 +4,6 @@ import {
 import { useEffect, useRef, useState } from 'react'
 
 import { MessageBubble } from './MessageBubble'
-import { VoiceCall } from './VoiceCall'
 import { Button } from '@/components/ui'
 import {
   SpeechRecognizer, isRecognitionSupported, isSynthesisSupported, speak, stopSpeaking, toSpeakable,
@@ -25,14 +24,13 @@ interface ChatPanelProps {
 export function ChatPanel({ variant = 'page', className }: ChatPanelProps) {
   const {
     messages, suggestions, stage, activeTool, escalated,
-    send, greet, requestHuman, reset, error,
+    send, greet, requestHuman, reset, error, setVoiceCallOpen,
   } = useChat()
 
   const [draft, setDraft] = useState('')
   const [dictating, setDictating] = useState(false)
   const [interim, setInterim] = useState('')
   const [speakReplies, setSpeakReplies] = useState(false)
-  const [callOpen, setCallOpen] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -76,7 +74,7 @@ export function ChatPanel({ variant = 'page', className }: ChatPanelProps) {
       setDictating(false)
       return
     }
-    const recognizer = new SpeechRecognizer('en-IN')
+    const recognizer = new SpeechRecognizer()
     recognizerRef.current = recognizer
     const started = recognizer.start({
       onPartial: setInterim,
@@ -141,7 +139,7 @@ export function ChatPanel({ variant = 'page', className }: ChatPanelProps) {
             size="icon"
             variant="ghost"
             title="Start a voice call"
-            onClick={() => setCallOpen(true)}
+            onClick={() => setVoiceCallOpen(true)}
           >
             <Mic className="h-4 w-4" />
           </Button>
@@ -250,8 +248,6 @@ export function ChatPanel({ variant = 'page', className }: ChatPanelProps) {
           </button>
         )}
       </div>
-
-      <VoiceCall open={callOpen} onClose={() => setCallOpen(false)} />
     </div>
   )
 }

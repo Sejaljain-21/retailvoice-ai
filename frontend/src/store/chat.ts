@@ -43,6 +43,8 @@ interface ChatState {
   pushAssistant: (message: Omit<ChatMessage, 'id' | 'role' | 'createdAt'>) => void
   setStage: (stage: AgentStage, tool?: string | null) => void
   setConversationId: (id: string | null) => void
+  voiceCallOpen: boolean
+  setVoiceCallOpen: (open: boolean) => void
   reset: () => void
 }
 
@@ -57,6 +59,8 @@ export const useChat = create<ChatState>((set, get) => ({
   escalated: false,
   ticketNumber: null,
   error: null,
+  voiceCallOpen: false,
+  setVoiceCallOpen: (open) => set({ voiceCallOpen: open }),
 
   greet(text) {
     if (get().messages.length) return

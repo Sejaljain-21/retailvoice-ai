@@ -35,7 +35,11 @@ export class SpeechRecognizer {
   private recognition: any = null
   private stopped = false
 
-  constructor(private language = 'en-IN') {}
+  constructor(
+    private language = typeof navigator !== 'undefined' && navigator.language
+      ? navigator.language
+      : 'en-US',
+  ) {}
 
   start(handlers: RecognitionHandlers): boolean {
     const Ctor = getRecognitionCtor()
@@ -49,7 +53,7 @@ export class SpeechRecognizer {
     this.stopped = false
     const recognition = new Ctor()
     recognition.lang = this.language
-    recognition.continuous = false
+    recognition.continuous = true
     recognition.interimResults = true
     recognition.maxAlternatives = 1
 
@@ -68,15 +72,16 @@ export class SpeechRecognizer {
     }
 
     recognition.onerror = (event: any) => {
+      // Natural silence ('no-speech') or aborts are not errors
+      if (event.error === 'no-speech' || event.error === 'aborted') {
+        return
+      }
       const map: Record<string, string> = {
-        'no-speech': "I didn't hear anything - try again.",
-        'audio-capture': 'No microphone was found.',
-        'not-allowed': 'Microphone permission was denied.',
-        network: 'The speech service could not be reached.',
+        'audio-capture': 'No microphone was found. Please check your audio settings.',
+        'not-allowed': 'Microphone permission was denied. Please allow microphone access in your browser address bar.',
+        network: 'Speech recognition service temporarily unavailable.',
       }
-      if (event.error !== 'aborted') {
-        handlers.onError?.(map[event.error] ?? `Speech recognition error: ${event.error}`)
-      }
+      handlers.onError?.(map[event.error] ?? `Speech recognition notice: ${event.error}`)
     }
 
     recognition.onend = () => {
@@ -152,21 +157,62 @@ export async function speak(
   if (!isSynthesisSupported() || !text.trim()) return
 
   const { language = 'en-IN', rate = 1.02, onStart } = options
-  window.speechSynthesis.cancel()
+  try {
+    window.speechSynthesis.cancel()
+  } catch {
+    /* ignore */
+  }
 
-  const voices = await loadVoices()
+  let voices: SpeechSynthesisVoice[] = []
+  try {
+    voices = await loadVoices()
+  } catch {
+    /* ignore */
+  }
   const voice = pickVoice(voices, language)
 
   return new Promise((resolve) => {
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = language
-    utterance.rate = rate
-    utterance.pitch = 1
-    if (voice) utterance.voice = voice
-    utterance.onstart = () => onStart?.()
-    utterance.onend = () => resolve()
-    utterance.onerror = () => resolve()
-    window.speechSynthesis.speak(utterance)
+    let resolved = false
+    const done = () => {
+      if (!resolved) {
+        resolved = true
+        clearInterval(resumeInterval)
+        clearTimeout(maxTimeout)
+        resolve()
+      }
+    }
+
+    // Safety timeout based on words to prevent Chrome from hanging if onend never fires
+    const wordCount = text.trim().split(/\s+/).length
+    const expectedDurationMs = Math.min(15000, Math.max(2500, wordCount * 500))
+    const maxTimeout = setTimeout(done, expectedDurationMs)
+
+    // Chrome bug workaround: keep synthesis active and detect completion
+    const resumeInterval = setInterval(() => {
+      try {
+        if (!window.speechSynthesis.speaking) {
+          done()
+        } else {
+          window.speechSynthesis.resume()
+        }
+      } catch {
+        done()
+      }
+    }, 400)
+
+    try {
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = language
+      utterance.rate = rate
+      utterance.pitch = 1
+      if (voice) utterance.voice = voice
+      utterance.onstart = () => onStart?.()
+      utterance.onend = done
+      utterance.onerror = done
+      window.speechSynthesis.speak(utterance)
+    } catch {
+      done()
+    }
   })
 }
 

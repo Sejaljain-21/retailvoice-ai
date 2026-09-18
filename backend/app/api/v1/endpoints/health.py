@@ -54,7 +54,13 @@ async def capabilities() -> dict:
         "python": platform.python_version(),
         "llm": {
             "provider": get_llm().name,
-            "model": settings.LLM_MODEL if get_llm().name == "anthropic" else "mock-planner-v1",
+            "model": (
+                getattr(get_llm(), "model", None)
+                or (settings.GEMINI_MODEL if "gemini" in get_llm().name.lower()
+                    else settings.GROQ_MODEL if "groq" in get_llm().name.lower()
+                    else settings.LLM_MODEL if "anthropic" in get_llm().name.lower()
+                    else "mock-planner-v1")
+            ),
             "max_tool_iterations": settings.AGENT_MAX_TOOL_ITERATIONS,
         },
         "speech": {

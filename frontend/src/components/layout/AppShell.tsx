@@ -1,15 +1,19 @@
 import {
-  BarChart3, BookOpen, Bot, ChevronDown, LifeBuoy, LogOut, MessagesSquare,
-  Menu, Package, Store, Ticket, X,
+  BarChart3, BookOpen, Bot, ChevronDown, LifeBuoy, LogOut, MessageSquare, MessagesSquare,
+  Menu, Mic, Package, Store, Ticket, X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+
+import { ChatPanel } from '@/components/chat/ChatPanel'
+import { VoiceCall } from '@/components/chat/VoiceCall'
 
 import { Badge, Button } from '@/components/ui'
 import { api } from '@/lib/api'
 import type { Capabilities } from '@/lib/types'
 import { cn, initials, titleCase } from '@/lib/utils'
 import { isStaff, useAuth } from '@/store/auth'
+import { useChat } from '@/store/chat'
 
 interface NavItem {
   to: string
@@ -40,6 +44,8 @@ export function AppShell() {
   const [open, setOpen] = useState(false)
   const [menu, setMenu] = useState(false)
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null)
+  const [chatOpen, setChatOpen] = useState(false)
+  const { voiceCallOpen, setVoiceCallOpen } = useChat()
 
   useEffect(() => {
     api.capabilities().then(setCapabilities).catch(() => setCapabilities(null))
@@ -85,7 +91,7 @@ export function AppShell() {
             <Bot className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-white">RetailVoice AI</p>
+            <p className="truncate text-sm font-bold text-white">Retail Voice</p>
             <p className="truncate text-[11px] text-ink-400">NovaMart support</p>
           </div>
           <button
@@ -115,30 +121,6 @@ export function AppShell() {
           )}
         </nav>
 
-        {/* Runtime badge - shows which providers this deployment is using */}
-        {capabilities && (
-          <div className="mx-3 mb-3 rounded-lg bg-ink-800 px-3 py-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-500">
-              Runtime
-            </p>
-            <dl className="mt-1.5 space-y-1 text-[11px] text-ink-300">
-              <div className="flex justify-between gap-2">
-                <dt className="text-ink-500">LLM</dt>
-                <dd className="truncate font-medium">{capabilities.llm.provider}</dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt className="text-ink-500">Speech</dt>
-                <dd className="truncate font-medium">
-                  {capabilities.speech.stt_provider} / {capabilities.speech.tts_provider}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt className="text-ink-500">Tools</dt>
-                <dd className="font-medium">{capabilities.tools.length}</dd>
-              </div>
-            </dl>
-          </div>
-        )}
 
         <div className="border-t border-ink-800 p-3">
           {user ? (
@@ -200,7 +182,7 @@ export function AppShell() {
           <button onClick={() => setOpen(true)} aria-label="Open navigation">
             <Menu className="h-5 w-5 text-ink-600" />
           </button>
-          <span className="text-sm font-semibold text-ink-900">RetailVoice AI</span>
+          <span className="text-sm font-semibold text-ink-900">Retail Voice</span>
           {capabilities?.llm.provider === 'mock' && (
             <Badge className="ml-auto bg-amber-100 text-amber-700 ring-amber-600/20">
               offline mode
@@ -212,6 +194,45 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+
+      {/* Global Voice Call Modal */}
+      <VoiceCall open={voiceCallOpen} onClose={() => setVoiceCallOpen(false)} />
+
+      {/* Floating Audio & Chat Action Bar (available on all pages except /support) */}
+      {location.pathname !== '/support' && (
+        <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3">
+          {chatOpen && (
+            <div className="h-[560px] w-[380px] max-w-[calc(100vw-2.5rem)] animate-fade-up overflow-hidden rounded-xl border border-ink-200 bg-white shadow-2xl">
+              <ChatPanel variant="widget" />
+            </div>
+          )}
+
+          <div className="flex items-center gap-2.5">
+            {/* Direct Floating Voice Call Button */}
+            <button
+              onClick={() => setVoiceCallOpen(true)}
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-600 text-white shadow-xl transition-all duration-200 hover:scale-105 hover:bg-brand-700 active:scale-95"
+              aria-label="Start voice call with Aura"
+              title="Voice call with Aura"
+            >
+              <Mic className="h-5 w-5" />
+            </button>
+
+            {/* Floating Chat Toggle Button */}
+            <button
+              onClick={() => setChatOpen((v) => !v)}
+              className={cn(
+                'flex h-12 w-12 items-center justify-center rounded-full text-white shadow-xl transition-all duration-200 hover:scale-105 active:scale-95',
+                chatOpen ? 'bg-ink-800 hover:bg-ink-900' : 'bg-brand-600 hover:bg-brand-700',
+              )}
+              aria-label={chatOpen ? 'Close support chat' : 'Open support chat'}
+              title={chatOpen ? 'Close chat' : 'Chat with Aura'}
+            >
+              {chatOpen ? <X className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

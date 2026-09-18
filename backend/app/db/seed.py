@@ -20,6 +20,42 @@ from app.core.logging import get_logger
 from app.core.security import hash_password
 from app.db.seed_data import CATEGORIES, KB_ARTICLES, PRODUCTS, STORES
 from app.db.session import SessionLocal
+
+# ---------------------------------------------------------------------------
+# Curated product images — relevant Unsplash photos for each SKU.
+# All images are free under the Unsplash License (free for commercial use).
+# ---------------------------------------------------------------------------
+_PRODUCT_IMAGES: dict[str, str] = {
+    # Electronics
+    "ELC-HDP-001": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80",  # over-ear headphones
+    "ELC-EBD-002": "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=600&q=80",  # wireless earbuds
+    "ELC-PHN-003": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=600&q=80",  # smartphone
+    "ELC-LPT-004": "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=600&q=80",  # laptop
+    "ELC-WCH-005": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&q=80",  # smartwatch
+    "ELC-PWB-006": "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=600&q=80",  # power bank
+    # Fashion
+    "FSH-SHO-101": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&q=80",  # running shoes
+    "FSH-JKT-102": "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=600&q=80",  # puffer jacket
+    "FSH-TSH-103": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&q=80",  # crew t-shirt
+    "FSH-BAG-104": "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=600&q=80",  # backpack
+    # Home & Kitchen
+    "HOM-MIX-201": "https://images.unsplash.com/photo-1585515320310-259814833e62?w=600&q=80",  # blender/mixer
+    "HOM-AIR-202": "https://images.unsplash.com/photo-1585771724684-38269d6639fd?w=600&q=80",  # air purifier
+    "HOM-COK-203": "https://images.unsplash.com/photo-1556911073-38141963c9e0?w=600&q=80",  # cookware/pans
+    "HOM-VAC-204": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80",  # cordless vacuum
+    # Beauty & Personal Care
+    "BTY-SRM-301": "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=600&q=80",  # serum bottle
+    "BTY-SHM-302": "https://images.unsplash.com/photo-1585751119414-ef2636f8aede?w=600&q=80",  # shampoo bottle
+    # Grocery
+    "GRC-COF-401": "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=600&q=80",  # coffee beans
+    "GRC-OIL-402": "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=600&q=80",  # cooking oil bottle
+    # Sports & Fitness
+    "SPT-YOG-501": "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=600&q=80",  # yoga mat
+    "SPT-DMB-502": "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600&q=80",  # dumbbells
+    "SPT-CYC-503": "https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=600&q=80",  # mountain bike
+}
+
+
 from app.models.catalog import Category, Product, StoreLocation
 from app.models.enums import (
     ChannelType,
@@ -158,7 +194,8 @@ async def seed_catalog(db: AsyncSession) -> list[Product]:
             is_returnable=item.get("returnable", True),
             tags=item["tags"],
             attributes=item["attributes"],
-            image_url=f"https://picsum.photos/seed/{item['sku']}/600/600",
+            image_url=_PRODUCT_IMAGES.get(item["sku"],
+                f"https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80"),
         )
         db.add(product)
         products.append(product)

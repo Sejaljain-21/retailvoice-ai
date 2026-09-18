@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# Start RetailVoice AI locally (macOS / Linux).
+# Start Retail Voice locally (macOS / Linux).
 #
 #   ./scripts/dev.sh            # install if needed, then run both servers
 #   ./scripts/dev.sh --reseed   # rebuild the demo database first
@@ -55,7 +55,7 @@ npm --prefix frontend run dev &
 
 cat <<'BANNER'
 
-  RetailVoice AI is running.
+  Retail Voice is running.
 
     Web app    http://localhost:5173
     API docs   http://localhost:8000/docs
