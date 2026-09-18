@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "RetailVoice AI - customer support & voice agent console for e-commerce and retail",
+  "description": "Retail Voice - customer support & voice agent console for e-commerce and retail",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

@@ -1,9 +1,9 @@
 import {
-  AlertTriangle, Bot, Mic, MicOff, PhoneOff, Volume2, Wrench,
+  AlertTriangle, Bot, Mic, MicOff, PhoneOff, Send, Volume2, Wrench,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { Button, Modal } from '@/components/ui'
+import { Button, Input, Modal } from '@/components/ui'
 import { api, voiceSocketUrl } from '@/lib/api'
 import {
   SpeechRecognizer, isRecognitionSupported, playBase64Audio, speak, stopSpeaking,
@@ -58,39 +58,78 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
   const lineId = useRef(0)
   const mutedRef = useRef(false)
   const transcriptRef = useRef<HTMLDivElement>(null)
+  const isSpeakingRef = useRef(false)
+  const lastSpokenRef = useRef('')
 
   const addLine = useCallback((who: Line['who'], text: string) => {
     lineId.current += 1
     setLines((current) => [...current.slice(-40), { id: lineId.current, who, text }])
   }, [])
 
+  const [manualText, setManualText] = useState('')
+
+  const sendManualText = (textToSend: string) => {
+    const text = textToSend.trim()
+    if (!text || socketRef.current?.readyState !== WebSocket.OPEN) return
+    setError(null)
+    setManualText('')
+    setPartial('')
+    recognizerRef.current?.abort()
+    addLine('you', text)
+    pushUser(text, true)
+    socketRef.current.send(JSON.stringify({ type: 'text', data: text }))
+    setState('thinking')
+  }
+
   /* ----------------------------------------------------------- capture --- */
   const startBrowserListening = useCallback(() => {
-    if (mutedRef.current || !isRecognitionSupported()) return
+    if (mutedRef.current || !isRecognitionSupported() || isSpeakingRef.current) return
     recognizerRef.current?.abort()
+    setError(null)
 
-    const recognizer = new SpeechRecognizer('en-IN')
+    const userLang =
+      typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en-US'
+    const recognizer = new SpeechRecognizer(userLang)
     recognizerRef.current = recognizer
-    recognizer.start({
-      onPartial: setPartial,
+    const started = recognizer.start({
+      onPartial: (text) => {
+        if (isSpeakingRef.current) return
+        setError(null)
+        setPartial(text)
+      },
       onFinal: (text) => {
+        if (isSpeakingRef.current) {
+          setPartial('')
+          return
+        }
+        setError(null)
         setPartial('')
-        if (!text.trim()) return
-        socketRef.current?.send(JSON.stringify({ type: 'text', data: text }))
+        const trimmed = text.trim()
+        if (!trimmed) return
+
+        // Immediately show in transcript so the user sees live feedback
+        addLine('you', trimmed)
+        pushUser(trimmed, true)
+        socketRef.current?.send(JSON.stringify({ type: 'text', data: trimmed }))
         setState('thinking')
       },
       onEnd: () => {
-        // Recognition stops after each utterance; restart while the call is open.
-        if (socketRef.current?.readyState === WebSocket.OPEN && !mutedRef.current) {
+        if (socketRef.current?.readyState === WebSocket.OPEN && !mutedRef.current && !isSpeakingRef.current) {
           setTimeout(() => {
-            if (socketRef.current?.readyState === WebSocket.OPEN) startBrowserListening()
-          }, 250)
+            if (socketRef.current?.readyState === WebSocket.OPEN && !isSpeakingRef.current) {
+              startBrowserListening()
+            }
+          }, 200)
         }
       },
-      onError: (message) => setError(message),
+      onError: (message) => {
+        if (message) setError(message)
+      },
     })
-    setState('listening')
-  }, [])
+    if (started) {
+      setState('listening')
+    }
+  }, [addLine, pushUser])
 
   const startServerCapture = useCallback(async () => {
     try {
@@ -167,9 +206,18 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
             if (frame.conversation_id) setConversationId(frame.conversation_id)
             const greeting = data.greeting as string | undefined
             if (greeting && !lines.length) {
+              lastSpokenRef.current = greeting
+              isSpeakingRef.current = true
               addLine('aura', greeting)
               setState('speaking')
-              await speak(greeting)
+              try {
+                await speak(greeting)
+              } catch {
+                /* ignore */
+              } finally {
+                await new Promise((resolve) => setTimeout(resolve, 300))
+                isSpeakingRef.current = false
+              }
             }
             if (voiceConfig && !voiceConfig.stt_client_side) {
               await startServerCapture()
@@ -182,8 +230,13 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
           case 'final_transcript': {
             const text = (data.text as string) ?? ''
             if (text) {
-              addLine('you', text)
-              pushUser(text, true)
+              setLines((current) => {
+                const last = current[current.length - 1]
+                if (last && last.who === 'you' && last.text.toLowerCase() === text.toLowerCase()) {
+                  return current
+                }
+                return [...current, { id: lineId.current + 1, who: 'you', text }]
+              })
             }
             setPartial('')
             setState('thinking')
@@ -204,6 +257,7 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
 
           case 'reply': {
             const text = (data.text as string) ?? ''
+            lastSpokenRef.current = text
             addLine('aura', text)
             pushAssistant({
               content: text,
@@ -219,19 +273,29 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
 
           case 'audio': {
             setState('speaking')
-            recognizerRef.current?.abort()   // don't transcribe our own voice
+            recognizerRef.current?.abort()   // immediately stop microphone
+            setPartial('')
+            isSpeakingRef.current = true
             const useClient = Boolean(data.use_client_tts)
-            if (useClient) {
-              await speak((data.text as string) ?? '')
-            } else {
-              await playBase64Audio(
-                (data.audio_base64 as string) ?? '',
-                (data.mime_type as string) ?? 'audio/wav',
-              )
-            }
-            if (socketRef.current?.readyState === WebSocket.OPEN && !mutedRef.current) {
-              if (voiceConfig && !voiceConfig.stt_client_side) setState('listening')
-              else startBrowserListening()
+            try {
+              if (useClient) {
+                await speak((data.text as string) ?? '')
+              } else {
+                await playBase64Audio(
+                  (data.audio_base64 as string) ?? '',
+                  (data.mime_type as string) ?? 'audio/wav',
+                )
+              }
+            } catch {
+              /* ignore */
+            } finally {
+              // Grace period: Wait 350ms after Aura finishes speaking
+              await new Promise((resolve) => setTimeout(resolve, 350))
+              isSpeakingRef.current = false
+              if (socketRef.current?.readyState === WebSocket.OPEN && !mutedRef.current) {
+                if (voiceConfig && !voiceConfig.stt_client_side) setState('listening')
+                else startBrowserListening()
+              }
             }
             break
           }
@@ -401,6 +465,58 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
               {partial}
             </p>
           )}
+        </div>
+
+        {/* Quick prompt chips & text input backup */}
+        <div className="w-full space-y-2">
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
+            <button
+              type="button"
+              disabled={state === 'thinking'}
+              onClick={() => sendManualText('Where is my order?')}
+              className="rounded-full border border-ink-200 bg-white px-2.5 py-1 text-[11px] font-medium text-ink-600 transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50"
+            >
+              "Where is my order?"
+            </button>
+            <button
+              type="button"
+              disabled={state === 'thinking'}
+              onClick={() => sendManualText('What is your refund policy?')}
+              className="rounded-full border border-ink-200 bg-white px-2.5 py-1 text-[11px] font-medium text-ink-600 transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50"
+            >
+              "What is your refund policy?"
+            </button>
+            <button
+              type="button"
+              disabled={state === 'thinking'}
+              onClick={() => sendManualText('Can I speak to a human agent?')}
+              className="rounded-full border border-ink-200 bg-white px-2.5 py-1 text-[11px] font-medium text-ink-600 transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50"
+            >
+              "Speak to a human"
+            </button>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              sendManualText(manualText)
+            }}
+            className="flex items-center gap-2"
+          >
+            <Input
+              value={manualText}
+              onChange={(e) => setManualText(e.target.value)}
+              placeholder="Or type here to talk with Aura…"
+              className="h-8 text-xs flex-1"
+            />
+            <Button
+              size="sm"
+              type="submit"
+              disabled={!manualText.trim() || state === 'thinking'}
+            >
+              <Send className="h-3.5 w-3.5" />
+            </Button>
+          </form>
         </div>
 
         <div className="flex items-center gap-3">

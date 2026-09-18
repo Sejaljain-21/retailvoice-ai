@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ---------------------------------------------------------------------------
-# RetailVoice AI - frontend image (build with Node, serve with nginx)
+# Retail Voice - frontend image (build with Node, serve with nginx)
 # ---------------------------------------------------------------------------
 FROM node:22-alpine AS build
 

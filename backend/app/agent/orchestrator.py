@@ -272,9 +272,10 @@ async def run_turn(
         if result.text:
             assistant_blocks.append({"type": "text", "text": result.text})
         for call in result.tool_uses:
-            assistant_blocks.append(
-                {"type": "tool_use", "id": call.id, "name": call.name, "input": call.input}
-            )
+            block: dict[str, Any] = {"type": "tool_use", "id": call.id, "name": call.name, "input": call.input}
+            if call.extra_content:
+                block["extra_content"] = call.extra_content
+            assistant_blocks.append(block)
         messages.append({"role": "assistant", "content": assistant_blocks})
 
         tool_result_blocks: list[dict[str, Any]] = []

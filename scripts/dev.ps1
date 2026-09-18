@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Start RetailVoice AI locally (Windows / PowerShell).
+    Start Retail Voice locally (Windows / PowerShell).
 
 .DESCRIPTION
     Creates the Python virtual environment and installs both dependency sets on
@@ -77,7 +77,7 @@ if (-not $BackendOnly) {
 
 Write-Host @'
 
-  RetailVoice AI is starting.
+  Retail Voice is starting.
 
     Web app    http://localhost:5173
     API docs   http://localhost:8000/docs

@@ -1,6 +1,6 @@
 # 1 · Software Requirements Specification
 
-**Project:** RetailVoice AI — Customer Support & Voice Agent
+**Project:** Retail Voice — Customer Support & Voice Agent
 **Domain:** E-commerce and retail
 **Version:** 1.0
 

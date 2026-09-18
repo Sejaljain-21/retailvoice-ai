@@ -1,6 +1,6 @@
 # 8 · Project report
 
-**RetailVoice AI — An AI Customer Support and Voice Agent for E-commerce and Retail**
+**Retail Voice — An AI Customer Support and Voice Agent for E-commerce and Retail**
 
 ---
 

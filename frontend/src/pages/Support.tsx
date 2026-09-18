@@ -1,7 +1,7 @@
-import { BookOpen, Package, RotateCcw, Truck, Wallet } from 'lucide-react'
+import { BookOpen, Headphones, Mic, Package, RotateCcw, Truck, Wallet } from 'lucide-react'
 
 import { ChatPanel } from '@/components/chat/ChatPanel'
-import { Card } from '@/components/ui'
+import { Button, Card } from '@/components/ui'
 import { useChat } from '@/store/chat'
 
 const QUICK_TOPICS = [
@@ -13,7 +13,7 @@ const QUICK_TOPICS = [
 ]
 
 export function Support() {
-  const { send, stage } = useChat()
+  const { send, stage, setVoiceCallOpen } = useChat()
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-5 px-4 py-6 lg:flex-row lg:px-8">
@@ -22,6 +22,25 @@ export function Support() {
       </div>
 
       <aside className="w-full shrink-0 space-y-4 lg:w-72">
+        <Card className="border-brand-200 bg-gradient-to-br from-brand-50 via-white to-violet-50 p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-brand-600 text-white shadow-md">
+              <Mic className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-ink-900">Voice Call with Aura</h2>
+              <p className="text-[11px] text-ink-500">Speak live over microphone</p>
+            </div>
+          </div>
+          <Button
+            className="mt-3.5 w-full gap-2 bg-brand-600 hover:bg-brand-700 shadow-sm"
+            onClick={() => setVoiceCallOpen(true)}
+          >
+            <Headphones className="h-4 w-4" />
+            Start Voice Call
+          </Button>
+        </Card>
+
         <Card className="p-4">
           <h2 className="text-sm font-semibold text-ink-900">Common requests</h2>
           <p className="mt-0.5 text-xs text-ink-500">One tap to get started.</p>
@@ -40,35 +59,6 @@ export function Support() {
           </div>
         </Card>
 
-        <Card className="p-4">
-          <h2 className="text-sm font-semibold text-ink-900">How Aura answers</h2>
-          <ul className="mt-3 space-y-2.5 text-xs leading-relaxed text-ink-600">
-            <li>
-              <span className="font-semibold text-ink-800">Grounded.</span> Order status,
-              stock and prices come from a live lookup, never from memory.
-            </li>
-            <li>
-              <span className="font-semibold text-ink-800">Cited.</span> Policy answers link
-              back to the help-centre article they came from.
-            </li>
-            <li>
-              <span className="font-semibold text-ink-800">Private.</span> Emails, phone
-              numbers and card numbers are masked before anything is stored.
-            </li>
-            <li>
-              <span className="font-semibold text-ink-800">Escalating.</span> Ask for a
-              person at any time — a human gets the full transcript.
-            </li>
-          </ul>
-        </Card>
-
-        <Card className="bg-ink-900 p-4">
-          <h2 className="text-sm font-semibold text-white">Prefer to talk?</h2>
-          <p className="mt-1 text-xs leading-relaxed text-ink-300">
-            Use the microphone in the chat header to start a live voice call. Aura listens,
-            answers out loud, and you can interrupt at any point.
-          </p>
-        </Card>
       </aside>
     </div>
   )

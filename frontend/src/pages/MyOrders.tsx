@@ -1,4 +1,4 @@
-import { MapPin, Package, RotateCcw, Truck, XCircle } from 'lucide-react'
+import { MapPin, Package, RotateCcw, ShoppingBag, Truck, XCircle } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -124,6 +124,12 @@ export function MyOrders() {
       <PageHeader
         title="My orders"
         description="Track, cancel or return — or ask Aura to do it for you."
+        action={
+          <Button onClick={() => navigate('/')}>
+            <ShoppingBag className="h-4 w-4" />
+            Book New Order
+          </Button>
+        }
       />
 
       {error && <ErrorBanner message={error} onRetry={load} />}

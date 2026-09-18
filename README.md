@@ -1,4 +1,4 @@
-# RetailVoice AI
+# Retail Voice
 
 **An AI customer-support and voice agent for e-commerce and retail.**
 

@@ -22,7 +22,7 @@ configure_logging()
 log = get_logger(__name__)
 
 DESCRIPTION = """
-**RetailVoice AI** - an AI customer-support and voice agent for e-commerce and retail.
+**Retail Voice** - an AI customer-support and voice agent for e-commerce and retail.
 
 * `POST /api/v1/chat/message` - text conversation with the agent
 * `POST /api/v1/voice/turn` - one complete voice turn (audio in, audio out)
