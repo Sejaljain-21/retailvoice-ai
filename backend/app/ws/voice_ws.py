@@ -7,18 +7,25 @@ Protocol (JSON text frames both ways - see `app/schemas/voice.py`):
     start                       ready            {conversation_id, providers}
     audio_chunk (base64)        partial_transcript
     audio_end                   final_transcript {text, confidence}
-    text        (browser STT)   thinking         {intent, sentiment}
-    barge_in                    tool_call        {tool, arguments}
-    stop                        tool_result      {tool, success, duration_ms}
-    ping                        reply_delta      {text}      (streamed typing)
-                                reply            {text, suggested_replies, ...}
+    text        (browser STT,   thinking         {intent, sentiment}
+      +confidence)               tool_call        {tool, arguments}
+    barge_in                    tool_result      {tool, success, duration_ms}
+    stop                        reply_delta      {text}      (streamed typing)
+    ping                        reply            {text, suggested_replies, ...}
                                 audio            {audio_base64 | use_client_tts}
                                 escalated        {reason, ticket_number}
+                                clarify          {text, message} (low-confidence
+                                                   transcript - confirm before acting)
                                 error / pong / closed
 
 Two modes are supported on the same socket:
   * server-side STT - client streams `audio_chunk` frames, server transcribes;
   * browser STT     - client sends a `text` frame with the finished transcript.
+
+A transcript below `LOW_CONFIDENCE_THRESHOLD` isn't acted on immediately: the
+server asks the customer to confirm it via a `clarify` frame and holds it in
+`VoiceSession.pending_transcript` until the next frame says yes, no, or simply
+restates the request.
 """
 
 from __future__ import annotations
@@ -48,6 +55,13 @@ router = APIRouter()
 MAX_BUFFERED_AUDIO = 12 * 1024 * 1024
 REPLY_CHUNK_WORDS = 6
 
+# Below this, a transcript is confirmed with the customer before it is acted on.
+# Exact 0.0 usually means the recogniser didn't measure confidence at all (a common
+# browser quirk), so it's treated as "no signal" rather than "definitely wrong".
+LOW_CONFIDENCE_THRESHOLD = 0.6
+_AFFIRMATIVE = {"yes", "yeah", "yep", "yup", "correct", "right", "haan", "ha", "sahi"}
+_NEGATIVE = {"no", "nope", "nah", "wrong", "incorrect", "nahi", "galat"}
+
 
 class VoiceSession:
     """One live call. Owns the audio buffer, sequence numbers and cancellation."""
@@ -62,6 +76,7 @@ class VoiceSession:
         self.busy = False
         self.cancelled = False
         self.turns = 0
+        self.pending_transcript: str | None = None
 
     async def send(self, event: str, data: dict[str, Any] | None = None) -> None:
         self.seq += 1
@@ -199,10 +214,14 @@ async def voice_socket(
                     await session.send("error", {"message": "I didn't catch that - could you "
                                                             "say it again?"})
                     continue
+                confidence = result.get("confidence", 0.0)
+                resolved = await _resolve_transcript(session, transcript, confidence)
+                if resolved is None:
+                    continue
                 await _handle_turn(
-                    session, transcript, token=token,
+                    session, resolved, token=token,
                     audio_duration_ms=result.get("duration_ms"),
-                    confidence=result.get("confidence"),
+                    confidence=confidence,
                 )
 
             elif kind == "text":
@@ -213,11 +232,16 @@ async def voice_socket(
                 if not transcript:
                     await session.send("error", {"message": "Empty transcript."})
                     continue
+                raw_confidence = event.get("confidence")
+                confidence = float(raw_confidence) if isinstance(raw_confidence, (int, float)) else 1.0
                 await session.send(
                     "final_transcript",
-                    {"text": transcript, "confidence": 1.0, "source": "client"},
+                    {"text": transcript, "confidence": confidence, "source": "client"},
                 )
-                await _handle_turn(session, transcript, token=token)
+                resolved = await _resolve_transcript(session, transcript, confidence)
+                if resolved is None:
+                    continue
+                await _handle_turn(session, resolved, token=token)
 
             elif kind == "stop":
                 async with session_scope() as db:
@@ -248,6 +272,40 @@ async def voice_socket(
             await websocket.close()
         except Exception:
             pass
+
+
+async def _resolve_transcript(
+    session: VoiceSession, transcript: str, confidence: float
+) -> str | None:
+    """Confirm low-confidence transcripts before acting on them.
+
+    Returns the transcript to run through the agent, or None if a clarification
+    was sent instead and the caller should wait for the next frame.
+    """
+    if session.pending_transcript is not None:
+        pending = session.pending_transcript
+        session.pending_transcript = None
+        word = transcript.strip().lower()
+        if word in _AFFIRMATIVE:
+            return pending
+        if word in _NEGATIVE:
+            await session.send(
+                "clarify", {"message": "No problem - go ahead and say that again."}
+            )
+            return None
+        # They didn't say yes/no - most likely they just repeated or rephrased it,
+        # so treat what they just said as the real query.
+        return transcript
+
+    if confidence and confidence < LOW_CONFIDENCE_THRESHOLD:
+        session.pending_transcript = transcript
+        await session.send(
+            "clarify",
+            {"text": transcript, "message": f'Just to confirm - did you say "{transcript}"?'},
+        )
+        return None
+
+    return transcript
 
 
 async def _handle_turn(

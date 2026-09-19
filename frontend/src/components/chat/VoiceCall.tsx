@@ -45,6 +45,7 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
   const [config, setConfig] = useState<VoiceConfig | null>(null)
   const [lines, setLines] = useState<Line[]>([])
   const [partial, setPartial] = useState('')
+  const [streamingReply, setStreamingReply] = useState('')
   const [activeTool, setActiveTool] = useState<string | null>(null)
   const [escalated, setEscalated] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -60,6 +61,7 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
   const transcriptRef = useRef<HTMLDivElement>(null)
   const isSpeakingRef = useRef(false)
   const lastSpokenRef = useRef('')
+  const noSpeechStreakRef = useRef(0)
 
   const addLine = useCallback((who: Line['who'], text: string) => {
     lineId.current += 1
@@ -74,6 +76,7 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
     setError(null)
     setManualText('')
     setPartial('')
+    setStreamingReply('')
     recognizerRef.current?.abort()
     addLine('you', text)
     pushUser(text, true)
@@ -94,10 +97,12 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
     const started = recognizer.start({
       onPartial: (text) => {
         if (isSpeakingRef.current) return
+        noSpeechStreakRef.current = 0
         setError(null)
         setPartial(text)
       },
-      onFinal: (text) => {
+      onFinal: (text, confidence) => {
+        noSpeechStreakRef.current = 0
         if (isSpeakingRef.current) {
           setPartial('')
           return
@@ -110,8 +115,18 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
         // Immediately show in transcript so the user sees live feedback
         addLine('you', trimmed)
         pushUser(trimmed, true)
-        socketRef.current?.send(JSON.stringify({ type: 'text', data: trimmed }))
+        socketRef.current?.send(JSON.stringify({ type: 'text', data: trimmed, confidence }))
         setState('thinking')
+      },
+      onNoSpeech: () => {
+        if (isSpeakingRef.current) return
+        noSpeechStreakRef.current += 1
+        if (noSpeechStreakRef.current >= 3) {
+          setError(
+            "Didn't catch that. Check that Chrome has microphone access (Windows: Settings → " +
+              'Privacy & security → Microphone) and that the right input device is selected.',
+          )
+        }
       },
       onEnd: () => {
         if (socketRef.current?.readyState === WebSocket.OPEN && !mutedRef.current && !isSpeakingRef.current) {
@@ -164,6 +179,26 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
     streamRef.current = null
   }, [])
 
+  /** Barge-in: let the customer cut Aura off mid-reply and start talking. */
+  const interruptSpeaking = useCallback(() => {
+    if (!isSpeakingRef.current || mutedRef.current) return
+    stopSpeaking()
+    isSpeakingRef.current = false
+    setPartial('')
+    try {
+      socketRef.current?.send(JSON.stringify({ type: 'barge_in' }))
+    } catch {
+      /* socket already gone */
+    }
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      if (config && !config.stt_client_side) {
+        void startServerCapture()
+      } else {
+        startBrowserListening()
+      }
+    }
+  }, [config, startServerCapture, startBrowserListening])
+
   /* --------------------------------------------------------- lifecycle --- */
   useEffect(() => {
     if (!open) return
@@ -172,9 +207,11 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
     setState('connecting')
     setLines([])
     setPartial('')
+    setStreamingReply('')
     setError(null)
     setEscalated(false)
     setSeconds(0)
+    noSpeechStreakRef.current = 0
 
     const timer = setInterval(() => setSeconds((s) => s + 1), 1000)
 
@@ -243,6 +280,16 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
             break
           }
 
+          case 'reply_delta': {
+            const chunk = (data.text as string) ?? ''
+            if (data.interrupted) {
+              setStreamingReply('')
+            } else if (chunk) {
+              setStreamingReply((current) => current + chunk)
+            }
+            break
+          }
+
           case 'tool_call':
             setActiveTool(data.tool as string)
             break
@@ -258,6 +305,7 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
           case 'reply': {
             const text = (data.text as string) ?? ''
             lastSpokenRef.current = text
+            setStreamingReply('')
             addLine('aura', text)
             pushAssistant({
               content: text,
@@ -291,6 +339,28 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
             } finally {
               // Grace period: Wait 350ms after Aura finishes speaking
               await new Promise((resolve) => setTimeout(resolve, 350))
+              isSpeakingRef.current = false
+              if (socketRef.current?.readyState === WebSocket.OPEN && !mutedRef.current) {
+                if (voiceConfig && !voiceConfig.stt_client_side) setState('listening')
+                else startBrowserListening()
+              }
+            }
+            break
+          }
+
+          case 'clarify': {
+            const message = (data.message as string) ?? ''
+            setState('speaking')
+            recognizerRef.current?.abort()
+            setPartial('')
+            isSpeakingRef.current = true
+            if (message) addLine('aura', message)
+            try {
+              await speak(message)
+            } catch {
+              /* ignore */
+            } finally {
+              await new Promise((resolve) => setTimeout(resolve, 300))
               isSpeakingRef.current = false
               if (socketRef.current?.readyState === WebSocket.OPEN && !mutedRef.current) {
                 if (voiceConfig && !voiceConfig.stt_client_side) setState('listening')
@@ -341,7 +411,7 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
       top: transcriptRef.current.scrollHeight,
       behavior: 'smooth',
     })
-  }, [lines, partial])
+  }, [lines, partial, streamingReply])
 
   function toggleMute() {
     const next = !muted
@@ -385,9 +455,20 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
             </>
           )}
           <div
+            role={state === 'speaking' ? 'button' : undefined}
+            tabIndex={state === 'speaking' ? 0 : undefined}
+            onClick={state === 'speaking' ? interruptSpeaking : undefined}
+            onKeyDown={
+              state === 'speaking'
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') interruptSpeaking()
+                  }
+                : undefined
+            }
+            title={state === 'speaking' ? 'Tap to interrupt' : undefined}
             className={cn(
               'relative flex h-24 w-24 items-center justify-center rounded-full text-white transition-colors',
-              state === 'speaking' ? 'bg-emerald-600'
+              state === 'speaking' ? 'cursor-pointer bg-emerald-600 hover:bg-emerald-700'
                 : state === 'thinking' ? 'bg-amber-500'
                 : state === 'error' ? 'bg-red-600'
                 : 'bg-brand-600',
@@ -404,7 +485,10 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
         </div>
 
         <div className="text-center">
-          <p className="text-sm font-semibold text-ink-900">{STATE_COPY[state]}</p>
+          <p className="text-sm font-semibold text-ink-900">
+            {STATE_COPY[state]}
+            {state === 'speaking' && <span className="ml-1 font-normal text-ink-400">(tap to interrupt)</span>}
+          </p>
           <p className="mt-0.5 text-xs text-ink-500">
             {mmss}
             {config && (
@@ -441,7 +525,7 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
           ref={transcriptRef}
           className="h-44 w-full space-y-2 overflow-y-auto scroll-thin rounded-lg border border-ink-200 bg-ink-50 p-3"
         >
-          {lines.length === 0 && !partial && (
+          {lines.length === 0 && !partial && !streamingReply && (
             <p className="pt-12 text-center text-xs text-ink-400">
               Say something like “where is my order?”
             </p>
@@ -463,6 +547,12 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
             <p className="text-xs italic text-ink-400">
               <span className="font-semibold">You: </span>
               {partial}
+            </p>
+          )}
+          {streamingReply && (
+            <p className="text-xs leading-relaxed">
+              <span className="font-semibold text-brand-700">Aura: </span>
+              <span className="text-ink-600">{streamingReply}</span>
             </p>
           )}
         </div>
