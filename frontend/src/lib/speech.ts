@@ -14,6 +14,7 @@ export interface RecognitionHandlers {
   onPartial?: (text: string) => void
   onFinal?: (text: string, confidence: number) => void
   onError?: (message: string) => void
+  onNoSpeech?: () => void
   onEnd?: () => void
 }
 
@@ -72,8 +73,15 @@ export class SpeechRecognizer {
     }
 
     recognition.onerror = (event: any) => {
-      // Natural silence ('no-speech') or aborts are not errors
-      if (event.error === 'no-speech' || event.error === 'aborted') {
+      // Aborts are not errors
+      if (event.error === 'aborted') {
+        return
+      }
+      // Natural silence isn't an error either, but repeated occurrences usually
+      // mean the mic is "open" yet no audio is reaching it (wrong input device,
+      // OS-level mic block, muted input) - let the caller track that.
+      if (event.error === 'no-speech') {
+        handlers.onNoSpeech?.()
         return
       }
       const map: Record<string, string> = {
@@ -182,17 +190,22 @@ export async function speak(
       }
     }
 
-    // Safety timeout based on words to prevent Chrome from hanging if onend never fires
+    // Safety timeout based on words to prevent Chrome from hanging if onend never fires.
+    // Generous on purpose: this is a last-resort fallback, not the normal completion
+    // path (onend is). Cutting it short truncates longer replies mid-sentence.
     const wordCount = text.trim().split(/\s+/).length
-    const expectedDurationMs = Math.min(15000, Math.max(2500, wordCount * 500))
+    const expectedDurationMs = Math.min(30000, Math.max(3000, wordCount * 700))
     const maxTimeout = setTimeout(done, expectedDurationMs)
 
-    // Chrome bug workaround: keep synthesis active and detect completion
+    // Chrome bug workaround: some versions auto-pause long utterances around the
+    // ~15s mark and never resume on their own. Only resume when actually paused -
+    // calling resume() on an utterance that's already playing causes audible
+    // stutter/distortion on Chrome/Windows.
     const resumeInterval = setInterval(() => {
       try {
         if (!window.speechSynthesis.speaking) {
           done()
-        } else {
+        } else if (window.speechSynthesis.paused) {
           window.speechSynthesis.resume()
         }
       } catch {
