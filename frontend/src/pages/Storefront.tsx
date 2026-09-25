@@ -1,17 +1,16 @@
 import {
   CheckCircle2, Copy, MessageSquare, Mic, Package, Search,
-  ShieldCheck, ShoppingBag, Sparkles, Star, Store, Truck, X,
+  ShieldCheck, ShoppingBag, Sparkles, Star, Store, Truck,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { PageHeader } from '@/components/layout/AppShell'
 import {
   Badge, Button, Card, EmptyState, ErrorBanner, Field, Input, Modal, Select, Skeleton, Textarea,
 } from '@/components/ui'
 import { api } from '@/lib/api'
 import type { Category, Order, Product } from '@/lib/types'
-import { cn, formatDate, formatMoney } from '@/lib/utils'
+import { formatDate, formatMoney } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 import { useChat } from '@/store/chat'
 
