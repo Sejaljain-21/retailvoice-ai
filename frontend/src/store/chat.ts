@@ -50,9 +50,40 @@ interface ChatState {
 
 const uid = () => `m_${Math.random().toString(36).slice(2, 11)}`
 
+const CONV_KEY = 'rv.conversation_id'
+const MSGS_KEY = 'rv.messages'
+
+function loadSavedSession(): { conversationId: string | null; messages: ChatMessage[] } {
+  try {
+    const convId = localStorage.getItem(CONV_KEY)
+    const rawMsgs = localStorage.getItem(MSGS_KEY)
+    return {
+      conversationId: convId || null,
+      messages: rawMsgs ? JSON.parse(rawMsgs) : [],
+    }
+  } catch {
+    return { conversationId: null, messages: [] }
+  }
+}
+
+function persistSession(conversationId: string | null, messages: ChatMessage[]) {
+  try {
+    if (conversationId) {
+      localStorage.setItem(CONV_KEY, conversationId)
+    } else {
+      localStorage.removeItem(CONV_KEY)
+    }
+    localStorage.setItem(MSGS_KEY, JSON.stringify(messages.slice(-30)))
+  } catch {
+    /* ignore storage quota errors */
+  }
+}
+
+const saved = loadSavedSession()
+
 export const useChat = create<ChatState>((set, get) => ({
-  conversationId: null,
-  messages: [],
+  conversationId: saved.conversationId,
+  messages: saved.messages,
   suggestions: ['Track my order', 'Start a return', 'What is your refund policy?'],
   stage: 'idle',
   activeTool: null,
@@ -64,37 +95,38 @@ export const useChat = create<ChatState>((set, get) => ({
 
   greet(text) {
     if (get().messages.length) return
-    set({
-      messages: [
-        { id: uid(), role: 'assistant', content: text, createdAt: new Date().toISOString() },
-      ],
-    })
+    const msgs: ChatMessage[] = [
+      { id: uid(), role: 'assistant', content: text, createdAt: new Date().toISOString() },
+    ]
+    set({ messages: msgs })
+    persistSession(get().conversationId, msgs)
   },
 
   pushUser(text, viaVoice = false) {
     const id = uid()
-    set((state) => ({
-      messages: [
-        ...state.messages,
-        {
-          id, role: 'user', content: text,
-          createdAt: new Date().toISOString(), viaVoice,
-        },
-      ],
-      error: null,
-    }))
+    const updated: ChatMessage[] = [
+      ...get().messages,
+      {
+        id, role: 'user', content: text,
+        createdAt: new Date().toISOString(), viaVoice,
+      },
+    ]
+    set({ messages: updated, error: null })
+    persistSession(get().conversationId, updated)
     return id
   },
 
   pushAssistant(message) {
-    set((state) => ({
-      messages: [
-        ...state.messages,
-        { id: uid(), role: 'assistant', createdAt: new Date().toISOString(), ...message },
-      ],
+    const updated: ChatMessage[] = [
+      ...get().messages,
+      { id: uid(), role: 'assistant', createdAt: new Date().toISOString(), ...message },
+    ]
+    set({
+      messages: updated,
       stage: 'idle',
       activeTool: null,
-    }))
+    })
+    persistSession(get().conversationId, updated)
   },
 
   setStage(stage, tool = null) {
@@ -103,6 +135,7 @@ export const useChat = create<ChatState>((set, get) => ({
 
   setConversationId(id) {
     set({ conversationId: id })
+    persistSession(id, get().messages)
   },
 
   async send(text, options = {}) {
@@ -175,6 +208,7 @@ export const useChat = create<ChatState>((set, get) => ({
   },
 
   reset() {
+    persistSession(null, [])
     set({
       conversationId: null,
       messages: [],

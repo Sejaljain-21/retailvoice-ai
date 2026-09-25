@@ -464,6 +464,7 @@ async def get_or_create_conversation(
             # Claim an anonymous thread once the visitor signs in.
             if user and not conversation.customer_id:
                 conversation.customer_id = user.id
+                await db.flush()
             return conversation
 
     conversation = Conversation(

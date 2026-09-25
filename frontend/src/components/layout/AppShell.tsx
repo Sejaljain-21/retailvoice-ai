@@ -1,6 +1,6 @@
 import {
-  BarChart3, BookOpen, Bot, ChevronDown, Headphones, LifeBuoy, LogOut, MessageSquare, MessagesSquare,
-  Menu, Mic, Package, Radio, Sparkles, Store, Ticket, X,
+  BarChart3, BookOpen, Bot, ChevronDown, Headphones, LifeBuoy, LogOut, Mail, MessageSquare, MessagesSquare,
+  Menu, Mic, Package, Phone, Radio, Sparkles, Store, Ticket, UserPlus, X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -148,16 +148,39 @@ export function AppShell() {
               </button>
 
               {menu && (
-                <div className="absolute bottom-full left-0 mb-1 w-full overflow-hidden rounded-lg border border-ink-700 bg-ink-800 shadow-xl">
+                <div className="absolute bottom-full left-0 mb-1 w-full overflow-hidden rounded-xl border border-ink-700 bg-ink-900/95 backdrop-blur-md shadow-2xl p-1.5 space-y-1">
+                  <div className="px-2.5 py-1.5 border-b border-ink-800 text-[11px] space-y-1">
+                    <div className="flex items-center gap-1.5 text-ink-300 truncate">
+                      <Mail className="h-3 w-3 text-ink-400 shrink-0" />
+                      <span className="truncate">{user.email}</span>
+                    </div>
+                    {user.phone && (
+                      <div className="flex items-center gap-1.5 text-ink-300 font-mono">
+                        <Phone className="h-3 w-3 text-ink-400 shrink-0" />
+                        <span>{user.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      logout()
+                      setMenu(false)
+                      navigate('/login')
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-brand-300 transition hover:bg-ink-800"
+                  >
+                    <UserPlus className="h-3.5 w-3.5 text-brand-400" />
+                    Switch / Create New Profile
+                  </button>
                   <button
                     onClick={() => {
                       logout()
                       setMenu(false)
                       navigate('/')
                     }}
-                    className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-ink-200 transition hover:bg-ink-700"
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-red-300 transition hover:bg-ink-800"
                   >
-                    <LogOut className="h-4 w-4" />
+                    <LogOut className="h-3.5 w-3.5 text-red-400" />
                     Sign out
                   </button>
                 </div>

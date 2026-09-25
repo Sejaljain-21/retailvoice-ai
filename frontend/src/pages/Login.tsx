@@ -24,16 +24,27 @@ export function Login() {
   const [email, setEmail] = useState('customer@retailvoice.ai')
   const [password, setPassword] = useState('Demo@1234')
   const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     setLocalError(null)
+
+    if (mode === 'signup') {
+      const cleanPhone = phone.trim()
+      const digits = cleanPhone.replace(/\D/g, '')
+      if (digits.length < 10 || digits.length > 15) {
+        setLocalError('Please enter a valid mobile number with at least 10 digits (e.g. +91 98765 43210).')
+        return
+      }
+    }
+
     try {
       const user =
         mode === 'signin'
           ? await login(email, password)
-          : await register({ email, password, full_name: fullName })
+          : await register({ email, password, full_name: fullName, phone: phone.trim() || undefined })
       navigate(from ?? (isStaff(user) ? '/console/conversations' : '/'), { replace: true })
     } catch {
       /* the store already holds the message */
@@ -117,15 +128,26 @@ export function Login() {
 
             <form onSubmit={submit} className="mt-5 space-y-4">
               {mode === 'signup' && (
-                <Field label="Full name">
-                  <Input
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Aarav Sharma"
-                    required
-                    minLength={2}
-                  />
-                </Field>
+                <>
+                  <Field label="Full name">
+                    <Input
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="e.g. Priyanshu Sharma"
+                      required
+                      minLength={2}
+                    />
+                  </Field>
+                  <Field label="Mobile Phone Number" hint="Used for SMS & OTP security verification">
+                    <Input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+91 98765 43210"
+                      required
+                    />
+                  </Field>
+                </>
               )}
 
               <Field label="Email">

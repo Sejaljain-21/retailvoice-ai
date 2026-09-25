@@ -1,10 +1,10 @@
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle2, ChevronDown, Clock,
-  Mic, Sparkles, User as UserIcon, Wrench, Zap,
+  MapPin, Mic, Package, ShieldCheck, Sparkles, Truck, User as UserIcon, Wrench, Zap,
 } from 'lucide-react'
 import { useState } from 'react'
 
-import type { ChatMessage } from '@/store/chat'
+import { useChat, type ChatMessage } from '@/store/chat'
 import { Badge } from '@/components/ui'
 import { cn, formatTime, renderMarkdown, SENTIMENT_STYLES, titleCase } from '@/lib/utils'
 
@@ -24,16 +24,299 @@ const TOOL_LABELS: Record<string, string> = {
   create_support_ticket: 'Created a support ticket',
   escalate_to_human: 'Escalated to a human agent',
   apply_goodwill_coupon: 'Issued a goodwill voucher',
+  send_security_otp: 'Dispatched security verification SMS',
+  verify_security_otp: 'Identity verification completed',
+  record_csat_feedback: 'Satisfaction score recorded',
 }
 
+/* ──────────────────────────────────────────────────────────────
+   Interactive Parcel Delivery Stepper
+   Parses track_shipment tool result and renders a visual courier
+   tracker directly in the chat bubble.
+────────────────────────────────────────────────────────────── */
+interface ShipmentResult {
+  order_id?: string
+  status?: string
+  courier?: string
+  tracking_number?: string
+  estimated_delivery?: string
+  current_location?: string
+  events?: Array<{ timestamp: string; description: string; location?: string }>
+}
+
+const COURIER_STEPS = [
+  { key: 'ordered', label: 'Ordered' },
+  { key: 'dispatched', label: 'Dispatched' },
+  { key: 'in_transit', label: 'In Transit' },
+  { key: 'out_for_delivery', label: 'Out for Delivery' },
+  { key: 'delivered', label: 'Delivered' },
+] as const
+
+type CourierStepKey = (typeof COURIER_STEPS)[number]['key']
+
+function statusToStep(status: string | undefined): number {
+  const s = (status ?? '').toLowerCase().replace(/\s+/g, '_')
+  if (s.includes('delivered') && !s.includes('out_for')) return 4
+  if (s.includes('out_for_delivery')) return 3
+  if (s.includes('in_transit') || s.includes('transit') || s.includes('shipped')) return 2
+  if (s.includes('dispatch') || s.includes('packed') || s.includes('confirmed')) return 1
+  return 0
+}
+
+function ParcelStepper({ result }: { result: ShipmentResult }) {
+  const currentStep = statusToStep(result.status)
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-2xl border border-violet-200/60 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-4 shadow-[0_0_24px_rgba(139,92,246,0.2)]">
+      {/* Header */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-violet-600/80">
+            <Truck className="h-3.5 w-3.5 text-white" />
+          </div>
+          <span className="text-xs font-bold text-violet-200">Live Shipment Tracker</span>
+        </div>
+        {result.order_id && (
+          <span className="rounded-full bg-white/10 px-2 py-0.5 font-mono text-[10px] text-slate-300">
+            {result.order_id}
+          </span>
+        )}
+      </div>
+
+      {/* Step indicators */}
+      <div className="relative mb-4">
+        {/* Connecting line */}
+        <div className="absolute left-3 top-3 h-0.5 right-3 bg-white/10" />
+        <div
+          className="absolute left-3 top-3 h-0.5 bg-gradient-to-r from-violet-500 to-emerald-400 transition-all duration-700"
+          style={{ width: currentStep === 0 ? '0%' : `${Math.min((currentStep / 4) * 100, 100)}%` }}
+        />
+
+        <div className="relative flex justify-between">
+          {COURIER_STEPS.map((step, index) => {
+            const done = index <= currentStep
+            const active = index === currentStep
+            return (
+              <div key={step.key} className="flex flex-col items-center gap-1.5" style={{ width: '20%' }}>
+                <div
+                  className={cn(
+                    'relative z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all duration-500',
+                    done
+                      ? 'border-emerald-400 bg-emerald-500 shadow-[0_0_12px_rgba(52,211,153,0.5)]'
+                      : 'border-white/20 bg-slate-800',
+                    active && 'scale-110 shadow-[0_0_16px_rgba(52,211,153,0.7)]',
+                  )}
+                >
+                  {done ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                  ) : (
+                    <span className="h-2 w-2 rounded-full bg-white/20" />
+                  )}
+                </div>
+                <span
+                  className={cn(
+                    'text-center text-[9px] font-medium leading-tight',
+                    done ? 'text-emerald-300' : 'text-slate-500',
+                    active && 'text-emerald-200 font-bold',
+                  )}
+                >
+                  {step.label}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Details row */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[10px]">
+        {result.courier && (
+          <span className="flex items-center gap-1 text-slate-400">
+            <Package className="h-3 w-3 text-violet-400" />
+            <span className="text-violet-200 font-medium">{result.courier}</span>
+          </span>
+        )}
+        {result.current_location && (
+          <span className="flex items-center gap-1 text-slate-400">
+            <MapPin className="h-3 w-3 text-rose-400" />
+            <span className="text-slate-300">{result.current_location}</span>
+          </span>
+        )}
+        {result.estimated_delivery && (
+          <span className="flex items-center gap-1 text-slate-400">
+            <Clock className="h-3 w-3 text-amber-400" />
+            <span className="text-amber-200">ETA: {result.estimated_delivery}</span>
+          </span>
+        )}
+      </div>
+
+      {/* Recent events */}
+      {result.events && result.events.length > 0 && (
+        <div className="mt-3 space-y-1.5 border-t border-white/10 pt-2.5">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+            Recent Updates
+          </span>
+          {result.events.slice(0, 3).map((ev, i) => (
+            <div key={i} className="flex items-start gap-2 text-[10px]">
+              <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
+              <div>
+                <span className="text-slate-300">{ev.description}</span>
+                {ev.location && (
+                  <span className="ml-1 text-slate-500">· {ev.location}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Autonomous OTP Verification Card (Chat & Voice authorization)
+────────────────────────────────────────────────────────────── */
+function OtpVerificationCard({
+  verified,
+  destination,
+  liveCode,
+  onSendCode,
+}: {
+  verified: boolean
+  destination?: string
+  liveCode?: string
+  onSendCode?: (code: string) => void
+}) {
+  const [code, setCode] = useState('')
+
+  if (verified) {
+    return (
+      <div className="mt-3 overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/80 via-slate-950 to-slate-900 p-3.5 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-emerald-200">Security Verification Granted</div>
+              <div className="text-[10px] text-emerald-400/80">Autonomous voice & transaction identity confirmed via SMS</div>
+            </div>
+          </div>
+          <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold text-emerald-300 border border-emerald-500/20">
+            ✓ AUTHORIZED
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-2xl border border-violet-500/40 bg-gradient-to-br from-violet-950/90 via-slate-950 to-indigo-950 p-3.5 shadow-[0_0_24px_rgba(139,92,246,0.25)]">
+      <div className="mb-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600/30 text-violet-300 border border-violet-500/30">
+            <ShieldCheck className="h-4 w-4 text-violet-400" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-violet-200">Autonomous Security Verification</div>
+            <div className="text-[10px] text-slate-400">
+              4-digit code dispatched to <span className="font-semibold text-violet-300 font-mono">{destination || 'registered mobile'}</span>
+            </div>
+          </div>
+        </div>
+        <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-semibold text-violet-300 border border-violet-500/30">
+          REQUIRED
+        </span>
+      </div>
+
+      {/* Live incoming SMS notification simulator */}
+      {liveCode && (
+        <div className="mb-2.5 flex items-center justify-between rounded-lg bg-emerald-950/60 border border-emerald-500/30 px-3 py-2 text-[11px] text-emerald-300">
+          <span className="flex items-center gap-1.5 font-medium">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            Live SMS received on {destination}:
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-bold tracking-widest bg-emerald-500/20 px-2 py-0.5 rounded text-emerald-200">
+              {liveCode}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCode(liveCode)}
+              className="text-[10px] underline text-emerald-400 hover:text-emerald-200"
+            >
+              Auto-fill
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 pt-1">
+        <input
+          type="text"
+          maxLength={4}
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          className="w-24 rounded-lg border border-violet-500/40 bg-slate-900/90 px-3 py-1.5 text-center font-mono text-xs tracking-widest text-violet-200 placeholder:text-slate-500 focus:border-violet-400 focus:outline-none"
+          placeholder="Enter OTP"
+        />
+        <button
+          type="button"
+          disabled={code.length < 4}
+          onClick={() => onSendCode?.(code)}
+          className="flex-1 rounded-lg bg-violet-600 disabled:opacity-40 px-3 py-1.5 text-xs font-semibold text-white shadow-md hover:bg-violet-500 active:scale-[0.98] transition flex items-center justify-center gap-1.5"
+        >
+          <ShieldCheck className="h-3.5 w-3.5" />
+          <span>Confirm Security OTP {code ? `(${code})` : ''}</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Extract parcel shipment data from tool trace results
+────────────────────────────────────────────────────────────── */
+function extractShipmentData(
+  toolTrace: import('@/lib/types').ToolTrace[],
+): ShipmentResult | null {
+  const trackTool = toolTrace.find((t) => t.tool === 'track_shipment' && t.success)
+  if (!trackTool) return null
+  const r = trackTool.result as Record<string, unknown>
+  if (!r || typeof r !== 'object') return null
+  return r as unknown as ShipmentResult
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Main MessageBubble Component
+────────────────────────────────────────────────────────────── */
 export function MessageBubble({ message }: { message: ChatMessage }) {
   const [showTrace, setShowTrace] = useState(false)
   const [showSources, setShowSources] = useState(false)
+  const { send } = useChat()
   const isUser = message.role === 'user'
 
   const tools = message.toolTrace ?? []
   const citations = message.citations ?? []
   const sentiment = message.sentiment ? SENTIMENT_STYLES[message.sentiment] : null
+  const shipment = !isUser ? extractShipmentData(tools) : null
+
+  const isOtpVerified = tools.some((t) => t.tool === 'verify_security_otp' && t.success)
+  // Only show the OTP card if the send_security_otp tool was explicitly called
+  // — never trigger purely on message text content to avoid false positives.
+  const isOtpPrompted =
+    !isUser &&
+    !isOtpVerified &&
+    tools.some((t) => t.tool === 'send_security_otp')
+
+  const otpTool = tools.find((t) => t.tool === 'send_security_otp' || t.tool === 'verify_security_otp')
+  const otpRes = (otpTool?.result as Record<string, unknown>) || {}
+  const liveCode = (otpRes.live_code as string) || (otpRes.code as string) || undefined
+  const maskedPhone =
+    (otpRes.masked_phone as string) ||
+    (otpRes.destination as string) ||
+    message.content.match(/\(\+91[^\)]+\)/)?.[0]?.replace(/[()]/g, '') ||
+    'your registered mobile'
 
   return (
     <div
@@ -71,6 +354,21 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
             />
           )}
         </div>
+
+        {/* ── Interactive Parcel Delivery Stepper ── */}
+        {shipment && <ParcelStepper result={shipment} />}
+
+        {/* ── Security OTP Verification Card ── */}
+        {(isOtpVerified || isOtpPrompted) && (
+          <OtpVerificationCard
+            verified={isOtpVerified}
+            destination={maskedPhone}
+            liveCode={liveCode}
+            onSendCode={(otpCode) => {
+              void send(`My security verification code is ${otpCode}`)
+            }}
+          />
+        )}
 
         {/* Escalation banner */}
         {message.escalated && (

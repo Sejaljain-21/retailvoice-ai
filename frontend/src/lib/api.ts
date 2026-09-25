@@ -197,6 +197,17 @@ export const api = {
     request(`/chat/conversations/${id}/reply`, { method: 'POST', body: { content } }),
   submitFeedback: (id: string, payload: { rating: number; resolved: boolean; comment?: string }) =>
     request(`/chat/conversations/${id}/feedback`, { method: 'POST', body: payload }),
+  saveEndCallSummary: (
+    id: string,
+    payload: {
+      issue?: string
+      resolution?: string
+      summary?: string
+      rma_or_refund_id?: string
+      next_steps?: string
+      voice_seconds?: number
+    },
+  ) => request(`/chat/conversations/${id}/end_call_summary`, { method: 'POST', body: payload }),
 
   /* voice */
   voiceConfig: () => request<VoiceConfig>('/voice/config', { auth: false }),

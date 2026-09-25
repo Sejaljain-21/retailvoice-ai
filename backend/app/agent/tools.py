@@ -19,6 +19,7 @@ from typing import Any, Awaitable, Callable
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -225,9 +226,10 @@ async def track_shipment(ctx: ToolContext, order_number: str | None = None,
 
 @tool(
     "cancel_order",
-    "Cancel an order that has not shipped yet and start the refund. Only call this "
-    "after the customer has clearly confirmed they want the order cancelled. "
-    "If the order has already shipped the tool will refuse and explain why.",
+    "Cancel an order that has not shipped yet and start the refund. "
+    "A valid security OTP verification (via send_security_otp and verify_security_otp) "
+    "MUST be performed before cancelling. If not verified, this tool will fail and instruct "
+    "you to send an OTP to the customer's registered phone.",
     _obj({
         "order_number": _str("Order reference to cancel."),
         "reason": _str("Why the customer wants to cancel."),
@@ -240,6 +242,36 @@ async def cancel_order(ctx: ToolContext, order_number: str = "",
     )
     if error:
         return error
+
+    # Verify that security OTP verification has been performed
+    meta = ctx.conversation.conversation_metadata or {}
+    is_verified = (
+        ctx.flags.get("otp_verified")
+        or meta.get("otp_verified")
+        or meta.get("otp_verified_for") in (order.order_number, "cancel_order", True)
+    )
+    if not is_verified:
+        phone = (ctx.user.phone if ctx.user else None)
+        if not phone:
+            return {
+                "error": "NO_PHONE_ON_ACCOUNT",
+                "requires_otp": True,
+                "order_number": order.order_number,
+                "message": "To cancel this order we need to send you a security code, but your account "
+                           "doesn't have a mobile number registered. Please update your profile with "
+                           "a valid phone number and try again.",
+            }
+        masked = _mask_phone(phone)
+        return {
+            "error": "OTP_VERIFICATION_REQUIRED",
+            "requires_otp": True,
+            "order_number": order.order_number,
+            "masked_phone": masked,
+            "message": f"Security verification required before cancelling order {order.order_number}. "
+                       f"A 4-digit verification code will be dispatched to your registered mobile ({masked}). "
+                       "Please ask me to send a security code first.",
+        }
+
     result = await orders.cancel_order(ctx.db, order, reason)
     if result.get("success"):
         ctx.flags["order_cancelled"] = order.order_number
@@ -692,6 +724,177 @@ async def apply_goodwill_coupon(ctx: ToolContext, reason: str,
         "expires_at": expires.isoformat(),
         "usage": "Applies to any order above the voucher value; single use.",
     }
+
+
+def _mask_phone(phone: str | None) -> str:
+    if not phone:
+        return "+91 99****4321"
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if len(digits) >= 10:
+        return f"+91 {digits[-10:-6]}****{digits[-4:]}"
+    return f"+91 ****{phone[-4:]}" if len(phone) >= 4 else "+91 99****4321"
+
+
+def _mask_email(email: str | None) -> str:
+    if not email or "@" not in email:
+        return "c****@example.com"
+    user_part, domain = email.split("@", 1)
+    return f"{user_part[:2]}***@{domain}"
+
+
+@tool(
+    "send_security_otp",
+    "Dispatch a simulated 4-digit security verification code via SMS to the customer's "
+    "registered mobile number/email. Call this whenever a customer requests an order cancellation, "
+    "high-value return, or bank refund. Never perform a sensitive cancellation without calling this first.",
+    _obj({
+        "action": _str("Operation requiring verification, e.g. 'cancel_order', 'initiate_return'."),
+        "order_number": _str("Order reference number."),
+        "destination": _str("Optional phone number or email if not already on the customer account."),
+    }, ["action"]),
+)
+async def send_security_otp(ctx: ToolContext, action: str = "cancel_order",
+                            order_number: str | None = None,
+                            destination: str | None = None) -> dict[str, Any]:
+    # Look up registered phone and email from the logged-in customer account
+    phone = destination or (ctx.user.phone if ctx.user else None)
+    email = (ctx.user.email if ctx.user else None)
+
+    # If no phone is available and no explicit destination given, we cannot send an OTP
+    if not phone:
+        return {
+            "otp_dispatched": False,
+            "error": "NO_PHONE_REGISTERED",
+            "message": (
+                "Your account doesn't have a mobile number on file. Please update your profile "
+                "with a valid phone number so we can send you the security verification code."
+            ),
+        }
+
+    masked_phone = _mask_phone(phone)
+    masked_email = _mask_email(email) if email else "(no email on file)"
+
+    # Generate a live dynamic 4-digit code (e.g. 5824, 7193, 8312)
+    code = f"{random.randint(1000, 9999)}"
+    meta = dict(ctx.conversation.conversation_metadata or {})
+    meta["pending_otp"] = {
+        "code": code,
+        "action": action,
+        "order_number": order_number,
+        "masked_phone": masked_phone,
+        "masked_email": masked_email,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    ctx.conversation.conversation_metadata = meta
+    flag_modified(ctx.conversation, "conversation_metadata")
+    await ctx.db.flush()
+
+    return {
+        "otp_dispatched": True,
+        "action": action,
+        "order_number": order_number,
+        "destination": masked_phone,
+        "masked_phone": masked_phone,
+        "masked_email": masked_email,
+        "live_code": code,
+        "message": (
+            f"A 4-digit verification code has been dispatched to your registered "
+            f"mobile number ({masked_phone}). Please confirm the code to complete authorization."
+        ),
+    }
+
+
+@tool(
+    "verify_security_otp",
+    "Verify the 4-digit security OTP code entered or spoken by the customer against the live code "
+    "dispatched to their phone/email. Only call this after the customer provides their code.",
+    _obj({
+        "code": _str("The 4-digit verification code spoken or entered by the customer."),
+        "action": _str("The operation being verified, e.g. 'cancel_order', 'bank_refund', 'initiate_return'."),
+        "order_number": _str("Order reference number if applicable."),
+    }, ["code"]),
+)
+async def verify_security_otp(ctx: ToolContext, code: str, action: str = "cancel_order",
+                              order_number: str | None = None) -> dict[str, Any]:
+    clean_code = "".join(ch for ch in str(code) if ch.isdigit())
+    meta = dict(ctx.conversation.conversation_metadata or {})
+    pending = meta.get("pending_otp") or {}
+    expected_code = pending.get("code")
+
+    if not clean_code:
+        return {
+            "verified": False,
+            "message": "Please enter the 4-digit verification code sent to your mobile.",
+            "status": "VERIFICATION_FAILED",
+        }
+    if not expected_code:
+        return {
+            "verified": False,
+            "message": "No active security code was found for this session. Please ask me to send a new one.",
+            "status": "NO_PENDING_OTP",
+        }
+    if clean_code != expected_code:
+        return {
+            "verified": False,
+            "message": f"Incorrect code. Please re-check the 4-digit SMS code sent to {pending.get('masked_phone', 'your mobile')}.",
+            "status": "VERIFICATION_FAILED",
+        }
+
+    target_order = order_number or pending.get("order_number")
+    ctx.flags["otp_verified"] = True
+    meta["otp_verified"] = True
+    meta["otp_verified_for"] = target_order or action or True
+    if "pending_otp" in meta:
+        del meta["pending_otp"]
+    ctx.conversation.conversation_metadata = meta
+    flag_modified(ctx.conversation, "conversation_metadata")
+    await ctx.db.flush()
+
+    return {
+        "verified": True,
+        "code": clean_code,
+        "action": action,
+        "order_number": target_order,
+        "message": f"Security verification code {clean_code} successfully verified for {action}.",
+        "status": "AUTHORIZATION_GRANTED",
+    }
+
+
+@tool(
+    "record_csat_feedback",
+    "Record the customer's post-resolution CSAT satisfaction score (1 to 5) into the analytics database. "
+    "Call this when the customer responds to the satisfaction survey question.",
+    _obj({
+        "rating": _int("Customer satisfaction rating from 1 to 5.", minimum=1, maximum=5),
+        "comment": _str("Customer's feedback comment or verbal sentiment reason."),
+        "resolved": _bool("Whether the customer's inquiry was successfully resolved."),
+    }, ["rating"]),
+)
+async def record_csat_feedback(ctx: ToolContext, rating: int, comment: str | None = None,
+                               resolved: bool = True) -> dict[str, Any]:
+    from app.models.support import Feedback
+    rating_val = max(1, min(5, int(rating)))
+    existing = (
+        await ctx.db.execute(select(Feedback).where(Feedback.conversation_id == ctx.conversation.id))
+    ).scalars().first()
+    if existing:
+        existing.rating = rating_val
+        existing.comment = comment or existing.comment
+        existing.resolved = resolved
+    else:
+        ctx.db.add(Feedback(
+            conversation_id=ctx.conversation.id,
+            rating=rating_val,
+            resolved=resolved,
+            comment=comment or "Captured via automated voice survey",
+        ))
+    await ctx.db.flush()
+    return {
+        "success": True,
+        "rating": rating_val,
+        "message": f"Customer satisfaction score {rating_val}/5 recorded in analytics records.",
+    }
+
 
 
 # ===========================================================================

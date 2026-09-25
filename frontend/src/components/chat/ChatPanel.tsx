@@ -1,10 +1,11 @@
 import {
-  Bot, Headphones, Mic, MicOff, RotateCcw, Send, Sparkles, UserCog,
+  Bot, Headphones, Mic, MicOff, RotateCcw, Send, Sparkles, Star, UserCog,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { MessageBubble } from './MessageBubble'
 import { Button } from '@/components/ui'
+import { api } from '@/lib/api'
 import {
   SpeechRecognizer, isRecognitionSupported, isSynthesisSupported, speak, stopSpeaking, toSpeakable,
 } from '@/lib/speech'
@@ -32,12 +33,33 @@ export function ChatPanel({ variant = 'page', className }: ChatPanelProps) {
   const [interim, setInterim] = useState('')
   const [speakReplies, setSpeakReplies] = useState(false)
 
+  /* ── CSAT Voice Survey ── */
+  const [csatVisible, setCsatVisible] = useState(false)
+  const [csatRating, setCsatRating] = useState(0)
+  const [csatHover, setCsatHover] = useState(0)
+  const [csatComment, setCsatComment] = useState('')
+  const [csatSubmitted, setCsatSubmitted] = useState(false)
+  const prevVoiceOpen = useRef(false)
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const recognizerRef = useRef<SpeechRecognizer | null>(null)
   const spokenRef = useRef<string | null>(null)
 
   useEffect(() => greet(GREETING), [greet])
+
+  // Detect voice call close → show CSAT survey
+  const { voiceCallOpen, conversationId } = useChat()
+  useEffect(() => {
+    if (prevVoiceOpen.current && !voiceCallOpen) {
+      setCsatVisible(true)
+      setCsatRating(0)
+      setCsatHover(0)
+      setCsatComment('')
+      setCsatSubmitted(false)
+    }
+    prevVoiceOpen.current = voiceCallOpen
+  }, [voiceCallOpen])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -154,6 +176,82 @@ export function ChatPanel({ variant = 'page', className }: ChatPanelProps) {
         {messages.map((message) => (
           <MessageBubble key={message.id} message={message} />
         ))}
+
+        {/* ── Automated CSAT Voice Survey ── */}
+        {csatVisible && !csatSubmitted && (
+          <div className="animate-fade-up rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-50 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-violet-900 mb-1">
+              How was your experience with Aura today?
+            </p>
+            <p className="text-xs text-violet-600 mb-3">
+              Your feedback helps us improve our service.
+            </p>
+            <div className="flex items-center gap-1 mb-3">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onMouseEnter={() => setCsatHover(star)}
+                  onMouseLeave={() => setCsatHover(0)}
+                  onClick={() => setCsatRating(star)}
+                  className="transition-transform hover:scale-110"
+                  aria-label={`Rate ${star} out of 5`}
+                >
+                  <Star
+                    className={cn(
+                      'h-7 w-7 transition-colors',
+                      (csatHover || csatRating) >= star
+                        ? 'fill-amber-400 text-amber-400'
+                        : 'text-slate-300',
+                    )}
+                  />
+                </button>
+              ))}
+              {csatRating > 0 && (
+                <span className="ml-2 text-xs font-medium text-violet-700">
+                  {csatRating === 5 ? 'Excellent!' : csatRating >= 4 ? 'Good' : csatRating >= 3 ? 'Average' : csatRating >= 2 ? 'Poor' : 'Very Poor'}
+                </span>
+              )}
+            </div>
+            <textarea
+              value={csatComment}
+              onChange={(e) => setCsatComment(e.target.value)}
+              placeholder="Any additional comments? (optional)"
+              rows={2}
+              className="input mb-3 w-full resize-none text-xs"
+            />
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                disabled={csatRating === 0}
+                onClick={async () => {
+                  if (conversationId && csatRating > 0) {
+                    try {
+                      await api.submitFeedback(conversationId, {
+                        rating: csatRating,
+                        resolved: true,
+                        comment: csatComment || undefined,
+                      })
+                    } catch { /* silent */ }
+                  }
+                  setCsatSubmitted(true)
+                }}
+              >
+                Submit feedback
+              </Button>
+              <button
+                onClick={() => setCsatVisible(false)}
+                className="text-xs text-slate-400 hover:text-slate-600 transition"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+        )}
+        {csatSubmitted && csatVisible && (
+          <div className="animate-fade-up rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+            Thank you for your feedback! Your rating has been recorded.
+          </div>
+        )}
 
         {busy && (
           <div className="flex flex-col gap-2 rounded-2xl border border-violet-400/40 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-3.5 text-white shadow-[0_0_25px_rgba(139,92,246,0.25)] animate-fade-up">
