@@ -266,6 +266,18 @@ export function AppShell() {
         <main className="min-h-0 flex-1 overflow-y-auto scroll-thin bg-ink-50">
           <Outlet />
         </main>
+
+        {/* Footer */}
+        <footer className="border-t border-ink-200/80 bg-white/90 px-6 py-3 backdrop-blur-md">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-400">
+            <span>© 2026 RetailVoice AI Ltd. · All rights reserved.</span>
+            <div className="flex items-center gap-4">
+              <NavLink to="/privacy" className="hover:text-brand-600 transition">Privacy Policy</NavLink>
+              <NavLink to="/terms" className="hover:text-brand-600 transition">Terms of Service</NavLink>
+              <NavLink to="/help" className="hover:text-brand-600 transition">Help Centre</NavLink>
+            </div>
+          </div>
+        </footer>
       </div>
 
       {/* Global Voice Call Modal */}
