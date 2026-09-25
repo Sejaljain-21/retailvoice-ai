@@ -263,8 +263,21 @@ export const api = {
 /** WebSocket URL for the voice session, carrying the JWT as a query param
  *  (browsers cannot set headers on a WebSocket handshake). */
 export function voiceSocketUrl(conversationId?: string | null, language = 'en'): string {
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const host = import.meta.env.VITE_WS_HOST || location.host
+  let protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  let host = location.host
+
+  if (import.meta.env.VITE_WS_HOST) {
+    host = import.meta.env.VITE_WS_HOST
+  } else if (import.meta.env.VITE_API_BASE_URL) {
+    try {
+      const url = new URL(import.meta.env.VITE_API_BASE_URL, window.location.origin)
+      host = url.host
+      protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    } catch {
+      /* fallback to location.host */
+    }
+  }
+
   const params = new URLSearchParams({ language })
   const token = tokenStore.access()
   if (token) params.set('token', token)
