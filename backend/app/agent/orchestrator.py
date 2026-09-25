@@ -461,11 +461,16 @@ async def get_or_create_conversation(
             await db.execute(select(Conversation).where(Conversation.id == conversation_id))
         ).scalars().first()
         if conversation:
-            # Claim an anonymous thread once the visitor signs in.
-            if user and not conversation.customer_id:
-                conversation.customer_id = user.id
-                await db.flush()
-            return conversation
+            # If this conversation belongs to another customer, do not return it to this user
+            if user and conversation.customer_id and conversation.customer_id != user.id:
+                log.info("Conversation %s belongs to customer %s, starting fresh for %s",
+                         conversation.id, conversation.customer_id, user.id)
+            else:
+                # Claim an anonymous thread once the visitor signs in.
+                if user and not conversation.customer_id:
+                    conversation.customer_id = user.id
+                    await db.flush()
+                return conversation
 
     conversation = Conversation(
         customer_id=user.id if user else None,

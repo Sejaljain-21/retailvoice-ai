@@ -176,6 +176,10 @@ export const useChat = create<ChatState>((set, get) => ({
       })
       return reply
     } catch (error) {
+      if (error instanceof Error && error.message.toLowerCase().includes('own conversations')) {
+        get().reset()
+        return get().send(trimmed, options)
+      }
       const message =
         error instanceof Error ? error.message : 'The assistant could not be reached.'
       set({ stage: 'idle', activeTool: null, error: message })

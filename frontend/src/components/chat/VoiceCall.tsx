@@ -97,6 +97,7 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
   const [otpPrompt, setOtpPrompt] = useState<string | null>(null)
   const [otpInput, setOtpInput] = useState('')
   const [otpSent, setOtpSent] = useState(false)
+  const [liveOtpCode, setLiveOtpCode] = useState<string | null>(null)
 
   const socketRef = useRef<WebSocket | null>(null)
   const recognizerRef = useRef<SpeechRecognizer | null>(null)
@@ -281,6 +282,7 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
     setState('thinking')
     setOtpPrompt(null)
     setOtpInput('')
+    setLiveOtpCode(null)
     setTimeout(() => setOtpSent(false), 3000)
   }
 
@@ -409,16 +411,26 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
             }
             break
 
-          case 'tool_result':
+          case 'tool_result': {
             setActiveTool(null)
-            if ((data.tool as string) === 'verify_security_otp') {
+            const toolName = data.tool as string
+            const res = data.result as Record<string, unknown> | undefined
+            if (toolName === 'verify_security_otp' && res?.verified) {
               setOtpPrompt(null)
-            } else if ((data.tool as string) === 'send_security_otp') {
-              const res = data.result as Record<string, unknown> | undefined
-              const phone = (res?.masked_phone as string) || 'registered mobile'
-              setOtpPrompt(`4-digit code dispatched to ${phone}. Enter or speak code:`)
+              setLiveOtpCode(null)
+            } else if (toolName === 'send_security_otp' || res?.requires_otp) {
+              const phone = (res?.masked_phone as string) || (res?.destination as string) || 'registered mobile'
+              const code = (res?.live_code as string) || (res?.code as string) || ''
+              if (code) {
+                setLiveOtpCode(code)
+                setOtpInput(code)
+                setOtpPrompt(`4-digit security code dispatched to ${phone}.`)
+              } else {
+                setOtpPrompt(`4-digit security code dispatched to ${phone}. Enter or speak code:`)
+              }
             }
             break
+          }
 
           case 'escalated':
             setEscalated(true)
@@ -431,7 +443,12 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
             addLine('aura', text)
             // Auto-trigger OTP panel in voice call if Aura requests OTP or verification code
             if (/\b(otp|verification code|security code|4-digit|one-time password)\b/i.test(text)) {
-              setOtpPrompt('Please enter or speak the 4-digit verification code sent to your registered mobile.')
+              const match = text.match(/\b(\d{4})\b/)
+              if (match) {
+                setLiveOtpCode(match[1])
+                setOtpInput(match[1])
+              }
+              setOtpPrompt('Please enter or speak the 4-digit verification code.')
             }
             pushAssistant({
               content: text,
@@ -503,6 +520,14 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
           case 'closed':
             setState('ended')
             break
+
+          case 'hangup': {
+            // Give 2.5s for goodbye speech to finish, then end call
+            setTimeout(() => {
+              endCall()
+            }, 2500)
+            break
+          }
         }
       }
 
@@ -591,29 +616,43 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
         {/* ── OTP Verification Panel ── */}
         {otpPrompt && (
           <div className="w-full animate-fade-up rounded-2xl border border-violet-400/60 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-4 shadow-[0_0_30px_rgba(139,92,246,0.35)]">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-600">
-                <Shield className="h-3.5 w-3.5 text-white" />
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-600">
+                  <Shield className="h-3.5 w-3.5 text-white" />
+                </div>
+                <span className="text-xs font-semibold text-violet-200">Secure Identity Verification</span>
               </div>
-              <span className="text-xs font-semibold text-violet-200">Secure Identity Verification</span>
+              {liveOtpCode && (
+                <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-xs font-mono font-bold text-emerald-300 border border-emerald-400/40 animate-pulse">
+                  SMS Code: {liveOtpCode}
+                </span>
+              )}
             </div>
-            <p className="text-[11px] text-slate-300 mb-3 leading-relaxed">{otpPrompt}</p>
+            <p className="text-[11px] text-slate-300 mb-3 leading-relaxed">
+              {otpPrompt}
+              {liveOtpCode && (
+                <span className="block mt-1 text-emerald-300 font-medium">
+                  Simulated SMS received: Your 4-digit code is <strong className="font-mono text-white bg-violet-900/60 px-1.5 py-0.5 rounded border border-violet-400/40">{liveOtpCode}</strong>
+                </span>
+              )}
+            </p>
             {!otpSent ? (
               <div className="flex gap-2">
                 <input
                   value={otpInput}
                   onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   onKeyDown={(e) => { if (e.key === 'Enter') submitOtp() }}
-                  placeholder="Enter 6-digit code"
+                  placeholder="Enter 4-digit code"
                   maxLength={6}
                   className="flex-1 rounded-xl border border-violet-500/40 bg-white/10 px-3 py-2 text-sm font-mono text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
                 />
                 <button
                   onClick={submitOtp}
                   disabled={otpInput.length < 4}
-                  className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-violet-500 disabled:opacity-40"
+                  className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-violet-500 disabled:opacity-40 shadow-lg shadow-violet-600/30"
                 >
-                  Verify
+                  Verify Code
                 </button>
               </div>
             ) : (

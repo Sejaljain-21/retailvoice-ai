@@ -26,6 +26,8 @@ const TOOL_LABELS: Record<string, string> = {
   apply_goodwill_coupon: 'Issued a goodwill voucher',
   send_security_otp: 'Dispatched security verification SMS',
   verify_security_otp: 'Identity verification completed',
+  place_order: 'Booked and placed order in database',
+  end_voice_call: 'Disconnected voice call',
   record_csat_feedback: 'Satisfaction score recorded',
 }
 
@@ -302,14 +304,19 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
   const shipment = !isUser ? extractShipmentData(tools) : null
 
   const isOtpVerified = tools.some((t) => t.tool === 'verify_security_otp' && t.success)
-  // Only show the OTP card if the send_security_otp tool was explicitly called
-  // — never trigger purely on message text content to avoid false positives.
+  // Show OTP card if send_security_otp was called or requires_otp is true
   const isOtpPrompted =
     !isUser &&
     !isOtpVerified &&
-    tools.some((t) => t.tool === 'send_security_otp')
+    (tools.some((t) => t.tool === 'send_security_otp') ||
+      tools.some((t) => Boolean((t.result as Record<string, unknown> | undefined)?.requires_otp)))
 
-  const otpTool = tools.find((t) => t.tool === 'send_security_otp' || t.tool === 'verify_security_otp')
+  const otpTool = tools.find(
+    (t) =>
+      t.tool === 'send_security_otp' ||
+      t.tool === 'verify_security_otp' ||
+      Boolean((t.result as Record<string, unknown> | undefined)?.requires_otp),
+  )
   const otpRes = (otpTool?.result as Record<string, unknown>) || {}
   const liveCode = (otpRes.live_code as string) || (otpRes.code as string) || undefined
   const maskedPhone =

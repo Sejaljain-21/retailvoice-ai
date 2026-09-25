@@ -436,6 +436,175 @@ async def recommend_products(ctx: ToolContext, query: str, max_price: float | No
 
 
 @tool(
+    "place_order",
+    "Book and place a real order in the database for the customer. "
+    "MANDATORY: Requires security OTP verification (via send_security_otp and verify_security_otp) "
+    "before execution. Never confirm or place an order without verified security OTP.",
+    _obj({
+        "product_query": _str("Name, SKU, or search terms of the product to order, e.g. 'AuraSound headphones'."),
+        "quantity": _int("Number of units to order (default 1).", minimum=1, maximum=10),
+        "payment_method": _str("Payment method: 'cod' (Cash on Delivery) or 'upi' (default 'cod')."),
+        "shipping_address": _str("Optional delivery street address override."),
+        "shipping_city": _str("Optional delivery city override."),
+        "shipping_pincode": _str("Optional 6-digit delivery pincode override."),
+        "coupon_code": _str("Optional promotional coupon code to apply."),
+    }, ["product_query"]),
+)
+async def place_order(
+    ctx: ToolContext,
+    product_query: str,
+    quantity: int = 1,
+    payment_method: str = "cod",
+    shipping_address: str | None = None,
+    shipping_city: str | None = None,
+    shipping_pincode: str | None = None,
+    coupon_code: str | None = None,
+) -> dict[str, Any]:
+    if not ctx.user:
+        return {
+            "success": False,
+            "error": "AUTHENTICATION_REQUIRED",
+            "message": "You need to be signed in to your account before I can place an order for you.",
+            "agent_hint": "Ask the customer to log in or register before booking an order.",
+        }
+
+    meta = dict(ctx.conversation.conversation_metadata or {})
+    is_verified = bool(
+        ctx.flags.get("otp_verified")
+        or meta.get("otp_verified")
+        or meta.get("otp_verified_for") in ("place_order", "book_order", True)
+    )
+
+    if not is_verified:
+        # Automatically trigger OTP dispatch if not already pending
+        if not meta.get("pending_otp"):
+            otp_res = await send_security_otp(ctx, action="place_order")
+            return {
+                "success": False,
+                "error": "OTP_VERIFICATION_REQUIRED",
+                "requires_otp": True,
+                "action": "place_order",
+                "otp_dispatched": True,
+                "live_code": otp_res.get("live_code"),
+                "destination": otp_res.get("destination"),
+                "message": (
+                    f"To place this order securely, a 4-digit verification code has been dispatched "
+                    f"to your registered mobile ({otp_res.get('destination')}). "
+                    f"For this demo, your code is {otp_res.get('live_code')}. Please confirm or enter the code to confirm your order."
+                ),
+                "agent_hint": (
+                    f"Security OTP {otp_res.get('live_code')} was dispatched to customer's mobile. "
+                    "Ask the customer to confirm this 4-digit OTP code before placing the order."
+                ),
+            }
+        pending_code = meta.get("pending_otp", {}).get("code")
+        pending_dest = meta.get("pending_otp", {}).get("masked_phone")
+        return {
+            "success": False,
+            "error": "OTP_VERIFICATION_REQUIRED",
+            "requires_otp": True,
+            "action": "place_order",
+            "live_code": pending_code,
+            "destination": pending_dest,
+            "message": (
+                f"Please confirm the 4-digit security code ({pending_code}) "
+                f"sent to your mobile to complete this order."
+            ),
+            "agent_hint": "Customer has a pending OTP. Ask them to confirm it and call verify_security_otp first.",
+        }
+
+    # Resolve product from catalog
+    products = await _search_products(ctx.db, product_query, limit=1)
+    if not products:
+        return {
+            "success": False,
+            "error": "PRODUCT_NOT_FOUND",
+            "message": f"I couldn't find any active product matching '{product_query}' in our catalogue.",
+            "agent_hint": "Ask the customer to clarify the product name or check product availability.",
+        }
+    product = products[0]
+    qty = max(1, min(10, int(quantity or 1)))
+
+    if product.stock_quantity < qty:
+        return {
+            "success": False,
+            "error": "OUT_OF_STOCK",
+            "message": f"Sorry, {product.name} only has {product.stock_quantity} unit(s) left in stock.",
+            "agent_hint": "Offer available stock or alternative recommendations.",
+        }
+
+    # Resolve customer address
+    profile = (
+        await ctx.db.execute(select(CustomerProfile).where(CustomerProfile.user_id == ctx.user.id))
+    ).scalars().first()
+
+    final_address = (
+        shipping_address
+        or (profile.default_address if profile else None)
+        or "402, Lakeview Apartments, 5th Cross, Koramangala"
+    )
+    final_city = shipping_city or (profile.city if profile else None) or "Bengaluru"
+    final_pincode = shipping_pincode or (profile.pincode if profile else None) or "560095"
+    method = (payment_method or "cod").strip().lower()
+    if method not in ("cod", "upi", "card", "netbanking"):
+        method = "cod"
+
+    try:
+        new_order = await orders.create_order(
+            ctx.db,
+            customer=ctx.user,
+            lines=[(product.id, qty)],
+            shipping_address=final_address,
+            shipping_city=final_city,
+            shipping_pincode=final_pincode,
+            payment_method=method,
+            coupon_code=coupon_code,
+        )
+    except Exception as exc:
+        log.exception("Failed to create order")
+        return {
+            "success": False,
+            "error": "ORDER_CREATION_FAILED",
+            "message": f"Could not create order: {str(exc)}",
+        }
+
+    # Consume verification flag
+    if "otp_verified" in meta:
+        del meta["otp_verified"]
+    if "otp_verified_for" in meta:
+        del meta["otp_verified_for"]
+    ctx.conversation.conversation_metadata = meta
+    flag_modified(ctx.conversation, "conversation_metadata")
+    ctx.flags["otp_verified"] = False
+    ctx.flags["order_placed"] = True
+    await ctx.db.flush()
+
+    delivery_date_str = (
+        new_order.expected_delivery.strftime("%B %d, %Y")
+        if new_order.expected_delivery
+        else "in 3-5 days"
+    )
+    return {
+        "success": True,
+        "order_number": new_order.order_number,
+        "status": new_order.status,
+        "product_name": product.name,
+        "quantity": qty,
+        "unit_price": product.price,
+        "total_amount": new_order.total_amount,
+        "payment_method": new_order.payment_method.upper(),
+        "shipping_address": f"{final_address}, {final_city} - {final_pincode}",
+        "expected_delivery": delivery_date_str,
+        "message": (
+            f"Your order {new_order.order_number} for {qty}x {product.name} has been placed successfully "
+            f"with {new_order.payment_method.upper()} for ₹{new_order.total_amount:,.2f}. "
+            f"It will be delivered to {final_city} by {delivery_date_str}."
+        ),
+    }
+
+
+
+@tool(
     "check_delivery_estimate",
     "Estimate the delivery date and shipping fee for a pincode, and say whether "
     "same-day or express delivery is available there.",
@@ -745,31 +914,20 @@ def _mask_email(email: str | None) -> str:
 @tool(
     "send_security_otp",
     "Dispatch a simulated 4-digit security verification code via SMS to the customer's "
-    "registered mobile number/email. Call this whenever a customer requests an order cancellation, "
-    "high-value return, or bank refund. Never perform a sensitive cancellation without calling this first.",
+    "registered mobile number/email. Call this whenever a customer requests booking/placing an order ('place_order'), "
+    "an order cancellation ('cancel_order'), high-value return, or bank refund. Never perform a sensitive action without calling this first.",
     _obj({
-        "action": _str("Operation requiring verification, e.g. 'cancel_order', 'initiate_return'."),
-        "order_number": _str("Order reference number."),
+        "action": _str("Operation requiring verification, e.g. 'place_order', 'cancel_order', 'initiate_return'."),
+        "order_number": _str("Order reference number if applicable."),
         "destination": _str("Optional phone number or email if not already on the customer account."),
     }, ["action"]),
 )
-async def send_security_otp(ctx: ToolContext, action: str = "cancel_order",
+async def send_security_otp(ctx: ToolContext, action: str = "place_order",
                             order_number: str | None = None,
                             destination: str | None = None) -> dict[str, Any]:
     # Look up registered phone and email from the logged-in customer account
-    phone = destination or (ctx.user.phone if ctx.user else None)
+    phone = destination or (ctx.user.phone if ctx.user else None) or "+91 98765 43210"
     email = (ctx.user.email if ctx.user else None)
-
-    # If no phone is available and no explicit destination given, we cannot send an OTP
-    if not phone:
-        return {
-            "otp_dispatched": False,
-            "error": "NO_PHONE_REGISTERED",
-            "message": (
-                "Your account doesn't have a mobile number on file. Please update your profile "
-                "with a valid phone number so we can send you the security verification code."
-            ),
-        }
 
     masked_phone = _mask_phone(phone)
     masked_email = _mask_email(email) if email else "(no email on file)"
@@ -799,7 +957,8 @@ async def send_security_otp(ctx: ToolContext, action: str = "cancel_order",
         "live_code": code,
         "message": (
             f"A 4-digit verification code has been dispatched to your registered "
-            f"mobile number ({masked_phone}). Please confirm the code to complete authorization."
+            f"mobile number ({masked_phone}). For this demo, your code is {code}. "
+            f"Please confirm or enter code {code} to complete authorization."
         ),
     }
 
@@ -810,11 +969,11 @@ async def send_security_otp(ctx: ToolContext, action: str = "cancel_order",
     "dispatched to their phone/email. Only call this after the customer provides their code.",
     _obj({
         "code": _str("The 4-digit verification code spoken or entered by the customer."),
-        "action": _str("The operation being verified, e.g. 'cancel_order', 'bank_refund', 'initiate_return'."),
+        "action": _str("The operation being verified, e.g. 'place_order', 'cancel_order', 'bank_refund'."),
         "order_number": _str("Order reference number if applicable."),
     }, ["code"]),
 )
-async def verify_security_otp(ctx: ToolContext, code: str, action: str = "cancel_order",
+async def verify_security_otp(ctx: ToolContext, code: str, action: str = "place_order",
                               order_number: str | None = None) -> dict[str, Any]:
     clean_code = "".join(ch for ch in str(code) if ch.isdigit())
     meta = dict(ctx.conversation.conversation_metadata or {})
@@ -841,9 +1000,10 @@ async def verify_security_otp(ctx: ToolContext, code: str, action: str = "cancel
         }
 
     target_order = order_number or pending.get("order_number")
+    target_action = action or pending.get("action") or "place_order"
     ctx.flags["otp_verified"] = True
     meta["otp_verified"] = True
-    meta["otp_verified_for"] = target_order or action or True
+    meta["otp_verified_for"] = target_order or target_action or True
     if "pending_otp" in meta:
         del meta["pending_otp"]
     ctx.conversation.conversation_metadata = meta
@@ -853,9 +1013,9 @@ async def verify_security_otp(ctx: ToolContext, code: str, action: str = "cancel
     return {
         "verified": True,
         "code": clean_code,
-        "action": action,
+        "action": target_action,
         "order_number": target_order,
-        "message": f"Security verification code {clean_code} successfully verified for {action}.",
+        "message": f"Security verification code {clean_code} successfully verified for {target_action}.",
         "status": "AUTHORIZATION_GRANTED",
     }
 
@@ -893,6 +1053,28 @@ async def record_csat_feedback(ctx: ToolContext, rating: int, comment: str | Non
         "success": True,
         "rating": rating_val,
         "message": f"Customer satisfaction score {rating_val}/5 recorded in analytics records.",
+    }
+
+
+@tool(
+    "end_voice_call",
+    "Gracefully end and disconnect the current voice phone call. Call this whenever the customer says "
+    "goodbye, or asks to cut, hang up, or end the call (e.g. 'cut the call', 'please cut the call', 'hang up', 'disconnect', 'bye', 'that is all').",
+    _obj({
+        "reason": _str("Reason for ending the call, e.g. 'customer_requested', 'issue_resolved'."),
+    }),
+)
+async def end_voice_call(ctx: ToolContext, reason: str = "customer_requested") -> dict[str, Any]:
+    ctx.flags["end_call"] = True
+    meta = dict(ctx.conversation.conversation_metadata or {})
+    meta["end_call"] = True
+    ctx.conversation.conversation_metadata = meta
+    flag_modified(ctx.conversation, "conversation_metadata")
+    await ctx.db.flush()
+    return {
+        "ended": True,
+        "reason": reason,
+        "message": "Call termination triggered. Speak a warm, brief farewell goodbye to the customer.",
     }
 
 

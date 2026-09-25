@@ -370,10 +370,18 @@ async def _handle_turn(
             },
         )
 
+        should_hangup = (
+            any(t.get("tool") == "end_voice_call" for t in turn.tool_trace)
+            or bool((conversation.conversation_metadata or {}).get("end_call"))
+        )
+
         if not session.cancelled:
             tts = get_tts()
             audio = await tts.synthesize(turn.speakable, language=session.language)
             await session.send("audio", audio)
+
+        if should_hangup:
+            await session.send("hangup", {"message": "Voice call terminated as requested by customer."})
 
     except Exception as exc:  # noqa: BLE001
         log.exception("Voice turn failed")
