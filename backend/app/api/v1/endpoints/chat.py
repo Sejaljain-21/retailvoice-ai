@@ -308,3 +308,71 @@ async def submit_feedback(
 
     await db.flush()
     return FeedbackOut.model_validate(feedback)
+
+
+# ---------------------------------------------------------------------------
+# Executive Voice Call Summary (Stored in DB for Supervisors, not user-downloadable)
+# ---------------------------------------------------------------------------
+from pydantic import BaseModel
+
+
+class CallSummaryPayload(BaseModel):
+    summary: str = ""
+    issue: str | None = None
+    resolution: str | None = None
+    rma_or_refund_id: str | None = None
+    next_steps: str | None = None
+    voice_seconds: float | None = 0.0
+
+
+@router.post("/conversations/{conversation_id}/end_call_summary", status_code=status.HTTP_201_CREATED)
+async def save_end_call_summary(
+    conversation_id: str,
+    payload: CallSummaryPayload,
+    db: DbSession,
+    user: OptionalUser,
+) -> dict:
+    conversation = (
+        await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+    ).scalars().first()
+    if not conversation:
+        raise NotFoundError("Conversation not found.")
+
+    desc_lines = [
+        f"**Issue**: {payload.issue or 'Voice Customer Support Session'}",
+        f"**Resolution**: {payload.resolution or payload.summary}",
+    ]
+    if payload.rma_or_refund_id:
+        desc_lines.append(f"**Reference / RMA ID**: {payload.rma_or_refund_id}")
+    if payload.next_steps:
+        desc_lines.append(f"**Next Steps**: {payload.next_steps}")
+    desc_lines.append(f"**Call Duration**: {payload.voice_seconds or 0:.1f}s")
+
+    ticket = await tickets_service.create_ticket(
+        db,
+        subject=f"Voice Resolution Summary: {payload.issue or 'Customer Voice Session'}",
+        description="\n\n".join(desc_lines),
+        category="Voice Support",
+        customer_id=conversation.customer_id,
+        conversation_id=conversation.id,
+        created_by_agent=True,
+        tags=["voice_session", "executive_summary", "auto_generated"],
+    )
+
+    meta = dict(conversation.conversation_metadata or {})
+    meta["executive_summary"] = {
+        "issue": payload.issue,
+        "resolution": payload.resolution,
+        "rma_or_refund_id": payload.rma_or_refund_id,
+        "next_steps": payload.next_steps,
+        "summary": payload.summary,
+        "ticket_number": ticket.ticket_number,
+    }
+    conversation.conversation_metadata = meta
+    await db.flush()
+    return {
+        "success": True,
+        "ticket_number": ticket.ticket_number,
+        "message": "Executive resolution summary stored in supervisor records.",
+    }
+

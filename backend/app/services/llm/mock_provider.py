@@ -54,6 +54,8 @@ class MockProvider(BaseLLMProvider):
         (r"\b(polic(y|ies)|terms|rules?|charges?|fees?|timeline|eligib\w+|warranty|"
          r"guarantee|how long|how many days|allowed to)\b",
          "search_knowledge_base"),
+        (r"\b(otp|verification|verify|security code|one-time password)\b",
+         "verify_security_otp"),
         (r"\b(cancel)\w*\b.*\b(order|purchase)\b|\bcancel my order\b", "cancel_order"),
         (r"\b(return|refund|replace|exchange|defect|damaged|broken|wrong item)\w*\b",
          "initiate_return"),
@@ -90,6 +92,28 @@ class MockProvider(BaseLLMProvider):
         collected = self._collect_tool_results(messages)
 
         if collected:
+            last_tool, last_res = collected[-1]
+            if (
+                last_tool == "verify_security_otp"
+                and last_res.get("verified")
+                and "cancel_order" in available
+            ):
+                order_num = last_res.get("order_number") or ""
+                return LLMResult(
+                    tool_uses=[
+                        ToolUse(
+                            id=f"toolu_{uuid.uuid4().hex[:16]}",
+                            name="cancel_order",
+                            input={
+                                "order_number": order_num,
+                                "reason": "Customer confirmed cancellation via verified security OTP",
+                            },
+                        )
+                    ],
+                    stop_reason="tool_use",
+                    model="mock-planner-v1",
+                    provider=self.name,
+                )
             text = self._compose_answer(collected, last_user_text(messages))
             return self._result(text)
 
@@ -110,7 +134,7 @@ class MockProvider(BaseLLMProvider):
         if self.THANKS_RE.search(lowered) and len(lowered.split()) <= 6:
             return self._result("You're very welcome! Anything else I can help with?")
 
-        tool_name = self._route(lowered, available)
+        tool_name = self._route(lowered, available, messages)
         if tool_name:
             return LLMResult(
                 tool_uses=[
@@ -148,9 +172,18 @@ class MockProvider(BaseLLMProvider):
         )
 
     # ------------------------------------------------------------- planning --
-    def _route(self, lowered: str, available: set[str]) -> str | None:
+    def _route(self, lowered: str, available: set[str], messages: list[dict[str, Any]] | None = None) -> str | None:
+        has_otp_verified = False
+        if messages:
+            msg_str = str(messages).lower()
+            # After .lower(), Python bool True repr → 'true', so this check is correct
+            if "verify_security_otp" in msg_str and ("authorization_granted" in msg_str or "'verified': true" in msg_str):
+                has_otp_verified = True
+
         for pattern, tool in self.ROUTES:
             if tool in available and re.search(pattern, lowered, re.I):
+                if tool == "cancel_order" and not has_otp_verified and "send_security_otp" in available:
+                    return "send_security_otp"
                 return tool
         if ORDER_RE.search(lowered) and "lookup_order" in available:
             return "lookup_order"
@@ -161,6 +194,19 @@ class MockProvider(BaseLLMProvider):
         order_ref = order_match.group(0).replace(" ", "").upper() if order_match else None
 
         match tool:
+            case "send_security_otp":
+                return {
+                    "action": "cancel_order",
+                    "order_number": order_ref or "",
+                }
+            case "verify_security_otp":
+                digit_match = re.search(r"\b(\d{4})\b", utterance)
+                code = digit_match.group(1) if digit_match else ""
+                return {
+                    "code": code,
+                    "action": "cancel_order",
+                    "order_number": order_ref or "",
+                }
             case "lookup_order":
                 return {"order_number": order_ref} if order_ref else {"most_recent": True}
             case "track_shipment":
@@ -341,13 +387,42 @@ class MockProvider(BaseLLMProvider):
                     )
                 return "\n".join(lines)
 
+            case "send_security_otp":
+                phone = r.get("masked_phone", "your registered phone")
+                order_num = r.get("order_number") or ""
+                order_bold = f" for order **{order_num}**" if order_num else ""
+                return (
+                    f"For your security, I have dispatched a live 4-digit verification code to your registered "
+                    f"mobile number ({phone}){order_bold}.\n\n"
+                    "Please check your SMS and enter or speak the 4-digit code to authorize cancelling this order."
+                )
+
+            case "verify_security_otp":
+                if r.get("verified"):
+                    order = r.get("order_number") or ""
+                    order_bold = f" for order **{order}**" if order else ""
+                    return (
+                        f"✓ Security authorization code **{r.get('code', '')}** verified successfully!\n\n"
+                        f"Your identity has been confirmed via live SMS authentication. "
+                        f"Proceeding to cancel the order{order_bold} and initiate your full refund..."
+                    )
+                return r.get("message") or "The verification code did not match. Please re-check the 4-digit SMS code."
+
             case "cancel_order":
                 if r.get("success"):
                     return (
-                        f"Done - order **{r.get('order_number')}** has been cancelled.\n"
+                        f"Done - order **{r.get('order_number')}** has been cancelled.\n\n"
                         f"A refund of {_money(r.get('refund_amount'))} will reach your original "
                         "payment method in 3-5 business days. "
                         "You'll receive a confirmation email shortly."
+                    )
+                if r.get("requires_otp"):
+                    phone = r.get("masked_phone", "your registered mobile")
+                    order = r.get("order_number") or ""
+                    return (
+                        f"For your security, cancelling order **{order}** requires SMS verification.\n\n"
+                        f"I have dispatched a 4-digit code to your registered mobile number ({phone}). "
+                        "Please check your SMS and enter or speak the code to authorize this transaction."
                     )
                 return r.get("message") or (
                     "That order can no longer be cancelled because it has already shipped. "
