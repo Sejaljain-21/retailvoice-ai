@@ -290,19 +290,19 @@ export function Support() {
           <div className="space-y-1">
             <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-300/80 bg-violet-100/70 px-3 py-0.5 text-xs font-bold text-violet-800">
               <Sparkles className="h-3 w-3 text-violet-600" />
-              <span>Dedicated Demo & Evaluation Suite</span>
+              <span>Interactive Support Scenarios</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-extrabold text-ink-900 tracking-tight">
-              1-Tap Evaluation Scenarios
+              Quick Voice &amp; Chat Actions
             </h2>
             <p className="text-xs sm:text-sm text-ink-500">
-              Click any scenario card below to trigger instant live autonomous reasoning, system execution, and customer resolution.
+              Select any scenario card below to interact with Aura for instant voice assistance, order queries, and resolutions.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-xs bg-ink-100 text-ink-700 border-ink-300">
-              5 Pre-Configured Benchmarks
+              5 Popular Actions
             </Badge>
           </div>
         </div>

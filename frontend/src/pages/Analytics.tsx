@@ -75,7 +75,7 @@ export function Analytics() {
     <div className="mx-auto max-w-7xl px-4 py-6 lg:px-8">
       <PageHeader
         title="Support analytics"
-        description={`Generated ${formatDate(data.generated_at, true)} · the numbers this project is measured on.`}
+        description={`Generated ${formatDate(data.generated_at, true)} · Key performance indicators and customer resolution metrics.`}
         action={
           <Select
             value={days}

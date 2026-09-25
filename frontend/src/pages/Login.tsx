@@ -102,7 +102,7 @@ export function Login() {
         </div>
 
         <p className="relative text-xs text-ink-500">
-          Major project · Customer support &amp; voice agent · E-commerce and retail
+          © {new Date().getFullYear()} NovaMart Retail · Customer Support &amp; Voice Assistance
         </p>
       </div>
 
