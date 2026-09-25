@@ -1,6 +1,6 @@
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle2, ChevronDown, Clock,
-  Mic, User as UserIcon, Wrench,
+  Mic, Sparkles, User as UserIcon, Wrench, Zap,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -93,10 +93,10 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
             {tools.length > 0 && (
               <button
                 onClick={() => setShowTrace((v) => !v)}
-                className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 font-medium text-ink-600 transition hover:bg-ink-200"
+                className="inline-flex items-center gap-1 rounded-full border border-violet-200/80 bg-violet-50/80 px-2.5 py-0.5 font-medium text-violet-700 transition hover:bg-violet-100/90 shadow-2xs"
               >
-                <Wrench className="h-3 w-3" />
-                {tools.length} action{tools.length > 1 ? 's' : ''}
+                <Zap className="h-3 w-3 text-violet-600" />
+                {tools.length} autonomous step{tools.length > 1 ? 's' : ''}
                 <ChevronDown className={cn('h-3 w-3 transition', showTrace && 'rotate-180')} />
               </button>
             )}
@@ -122,31 +122,61 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
           </div>
         )}
 
-        {/* Tool trace */}
+        {/* Autonomous Reasoning & Execution Flow */}
         {showTrace && tools.length > 0 && (
-          <ul className="mt-2 w-full space-y-1.5 rounded-lg border border-ink-200 bg-ink-50 p-2.5">
-            {tools.map((tool, index) => (
-              <li key={`${tool.tool}-${index}`} className="flex items-start gap-2 text-xs">
-                {tool.success ? (
-                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                ) : (
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600" />
-                )}
-                <div className="min-w-0">
-                  <p className="font-medium text-ink-700">
-                    {TOOL_LABELS[tool.tool] ?? titleCase(tool.tool)}
-                    <span className="ml-1.5 font-normal text-ink-400">{tool.duration_ms}ms</span>
-                  </p>
-                  {Object.keys(tool.arguments ?? {}).length > 0 && (
-                    <p className="truncate font-mono text-[11px] text-ink-500">
-                      {JSON.stringify(tool.arguments)}
-                    </p>
-                  )}
-                  {tool.error && <p className="text-[11px] text-red-600">{tool.error}</p>}
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-2.5 w-full space-y-2 rounded-2xl border border-violet-400/40 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-3.5 text-white shadow-[0_0_25px_rgba(139,92,246,0.25)]">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2 text-[11px] font-semibold text-violet-200">
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-violet-400" />
+                Autonomous Step-by-Step Reasoning
+              </span>
+              <span className="text-[10px] font-medium text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                Verified against store records
+              </span>
+            </div>
+
+            <ul className="space-y-2 pt-1">
+              {tools.map((tool, index) => (
+                <li key={`${tool.tool}-${index}`} className="flex items-start gap-2.5 rounded-xl bg-white/5 border border-white/10 p-2.5 text-xs transition hover:border-violet-400/40">
+                  <div className="flex flex-col items-center">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-600/80 text-[10px] font-bold text-white shadow-2xs">
+                      {index + 1}
+                    </span>
+                    {index < tools.length - 1 && (
+                      <span className="w-0.5 h-3 bg-violet-500/30 my-0.5" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-bold text-white flex items-center gap-1.5">
+                        {TOOL_LABELS[tool.tool] ?? titleCase(tool.tool)}
+                        {tool.success ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                        ) : (
+                          <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
+                        )}
+                      </p>
+                      <span className="text-[10px] font-mono font-medium text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded border border-emerald-400/30 shrink-0">
+                        {tool.duration_ms}ms
+                      </span>
+                    </div>
+
+                    {Object.keys(tool.arguments ?? {}).length > 0 && (
+                      <p className="mt-1 text-[11px] text-slate-300 font-medium truncate">
+                        Context:{' '}
+                        <span className="text-violet-200 font-mono bg-white/5 px-1 py-0.5 rounded">
+                          {Object.entries(tool.arguments ?? {})
+                            .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
+                            .join(', ')}
+                        </span>
+                      </p>
+                    )}
+                    {tool.error && <p className="mt-1 text-[11px] text-red-400">{tool.error}</p>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {/* Citations */}

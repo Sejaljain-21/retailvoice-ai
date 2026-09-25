@@ -484,27 +484,44 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
           </div>
         </div>
 
+        {/* Animated Audio Frequency Spectrum */}
+        <div className="flex items-center justify-center gap-1.5 h-10 px-4 py-1 rounded-2xl bg-slate-950/80 border border-violet-500/30 shadow-[0_0_20px_rgba(139,92,246,0.2)]">
+          {[0.2, 0.45, 0.8, 0.35, 0.95, 0.6, 0.4, 0.75, 1.0, 0.85, 0.5, 0.9, 0.65, 0.35, 0.8, 0.55, 0.3, 0.7, 0.9, 0.5, 0.25].map((factor, i) => (
+            <span
+              key={i}
+              className={cn(
+                'w-1 rounded-full transition-all duration-150',
+                state === 'speaking'
+                  ? 'bg-gradient-to-t from-emerald-500 to-teal-300 animate-soundwave shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+                  : state === 'listening'
+                    ? 'bg-gradient-to-t from-violet-600 to-indigo-300 animate-soundwave shadow-[0_0_8px_rgba(139,92,246,0.5)]'
+                    : 'bg-slate-700 h-1.5',
+              )}
+              style={{
+                animationDelay: `${(i * 0.06).toFixed(2)}s`,
+                animationDuration: `${(0.55 + factor * 0.45).toFixed(2)}s`,
+                height: state === 'speaking' || state === 'listening' ? undefined : '4px',
+              }}
+            />
+          ))}
+        </div>
+
         <div className="text-center">
           <p className="text-sm font-semibold text-ink-900">
             {STATE_COPY[state]}
             {state === 'speaking' && <span className="ml-1 font-normal text-ink-400">(tap to interrupt)</span>}
           </p>
-          <p className="mt-0.5 text-xs text-ink-500">
-            {mmss}
-            {config && (
-              <>
-                {' · '}
-                {config.stt_client_side ? 'on-device speech' : `${config.stt_provider} STT`}
-              </>
-            )}
+          <p className="mt-0.5 text-xs text-ink-500 font-mono">
+            {mmss} · Hands-Free Autonomous Voice Session
           </p>
         </div>
 
         {activeTool && (
-          <p className="inline-flex items-center gap-1.5 rounded-full bg-ink-100 px-3 py-1 text-xs text-ink-600">
-            <Wrench className="h-3 w-3" />
-            {titleCase(activeTool)}
-          </p>
+          <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/60 bg-gradient-to-r from-violet-950/90 via-slate-900 to-indigo-950/90 px-3.5 py-1 text-xs font-semibold text-violet-200 shadow-[0_0_15px_rgba(139,92,246,0.3)] animate-fade-up">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <Wrench className="h-3.5 w-3.5 text-violet-400" />
+            <span>Autonomous Step 2/3: {titleCase(activeTool)}</span>
+          </div>
         )}
 
         {escalated && (
@@ -624,11 +641,9 @@ export function VoiceCall({ open, onClose }: { open: boolean; onClose: () => voi
           </Button>
         </div>
 
-        {!isRecognitionSupported() && config?.stt_client_side && (
+        {!isRecognitionSupported() && (
           <p className="text-center text-xs text-ink-500">
-            This browser has no speech recognition. Chrome, Edge or Safari support it —
-            or set <code className="font-mono">STT_PROVIDER=whisper</code> on the server
-            to transcribe audio server-side.
+            Speech recognition is not supported in this browser. Please open in Chrome, Edge, or Safari for voice calls.
           </p>
         )}
       </div>

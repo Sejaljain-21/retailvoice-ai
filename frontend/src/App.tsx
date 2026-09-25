@@ -49,8 +49,9 @@ export default function App() {
       <Route path="/login" element={<Login />} />
 
       <Route element={<AppShell />}>
-        <Route index element={<Storefront />} />
-        <Route path="support" element={<Support />} />
+        <Route index element={<Support />} />
+        <Route path="store" element={<Storefront />} />
+        <Route path="support" element={<Navigate to="/" replace />} />
         <Route path="help" element={<HelpCentre />} />
         <Route
           path="orders"

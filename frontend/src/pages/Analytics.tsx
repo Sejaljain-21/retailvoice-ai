@@ -139,9 +139,9 @@ export function Analytics() {
           icon={<Mic className="h-4 w-4" />}
         />
         <Stat
-          label="Estimated LLM cost"
+          label="Estimated operational cost"
           value={`$${kpis.estimated_cost_usd.toFixed(2)}`}
-          hint={`${(kpis.total_tokens / 1000).toFixed(1)}k tokens`}
+          hint={`${(kpis.total_tokens / 1000).toFixed(1)}k usage units`}
           icon={<DollarSign className="h-4 w-4" />}
         />
       </div>

@@ -1,6 +1,6 @@
 import {
-  CheckCircle2, Copy, MessageSquare, Package, Search,
-  ShieldCheck, ShoppingBag, Star, Truck, X,
+  CheckCircle2, Copy, MessageSquare, Mic, Package, Search,
+  ShieldCheck, ShoppingBag, Sparkles, Star, Store, Truck, X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -220,10 +220,27 @@ export function Storefront() {
   return (
     <>
       <div className="mx-auto max-w-7xl px-4 py-6 lg:px-8">
-        <PageHeader
-          title="NovaMart"
-          description="Electronics, fashion, home and more — click any product to view details and book."
-        />
+        {/* Retail Sandbox Context Banner */}
+        <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-violet-50 p-5 shadow-xs">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+              <Store className="h-3.5 w-3.5" />
+              <span>Interactive Retail Sandbox</span>
+            </div>
+            <h1 className="text-xl font-bold text-ink-900">Retail Product Catalog & Sandbox</h1>
+            <p className="text-xs text-ink-600 max-w-2xl">
+              Simulate customer purchases or browse catalog inventory. Any order created here is stored in the live database and can be tracked, inquired upon, or returned autonomously by <strong>Aura</strong>.
+            </p>
+          </div>
+
+          <Button
+            onClick={() => navigate('/')}
+            className="shrink-0 gap-2 bg-gradient-to-r from-brand-600 to-violet-600 hover:from-brand-700 hover:to-violet-700 text-xs font-semibold"
+          >
+            <Mic className="h-4 w-4" />
+            <span>Open Voice & Support Studio</span>
+          </Button>
+        </div>
 
         {/* Filters */}
         <div className="mb-5 flex flex-wrap items-center gap-3">
@@ -401,7 +418,7 @@ export function Storefront() {
                   setOrderPlaced(null)
                   chat.reset()
                   chat.send(`Where is my order ${num}?`)
-                  navigate('/support')
+                  navigate('/')
                 }}
               >
                 <MessageSquare className="h-4 w-4" />
@@ -520,6 +537,25 @@ export function Storefront() {
                     <span className="text-red-600 font-medium">Out of stock</span>
                   )}
                 </p>
+
+                {/* Ask Aura about this product button */}
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const name = selectedProduct.name
+                      setSelectedProduct(null)
+                      chat.reset()
+                      chat.send(`Tell me about the stock, warranty and return policy for ${name}.`)
+                      navigate('/')
+                    }}
+                    className="w-full gap-2 text-xs font-semibold text-brand-700 border-brand-200 hover:bg-brand-50"
+                  >
+                    <Mic className="h-3.5 w-3.5 text-brand-600" />
+                    Ask Aura about this product
+                  </Button>
+                </div>
               </div>
 
               <div className="my-4 border-t border-ink-200" />

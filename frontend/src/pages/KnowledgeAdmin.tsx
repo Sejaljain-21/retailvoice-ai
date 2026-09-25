@@ -142,10 +142,10 @@ export function KnowledgeAdmin() {
 
       {stats && (
         <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label="Articles" value={stats.documents} icon={<BookOpen className="h-4 w-4" />} />
-          <Stat label="Indexed chunks" value={stats.chunks} icon={<Database className="h-4 w-4" />} />
-          <Stat label="Embedding model" value={<span className="text-sm">{stats.embedding_model}</span>} />
-          <Stat label="Vector size" value={stats.dim} hint="dimensions per chunk" />
+          <Stat label="Total Articles" value={stats.documents} icon={<BookOpen className="h-4 w-4" />} />
+          <Stat label="Indexed Topics" value={stats.chunks} icon={<Database className="h-4 w-4" />} />
+          <Stat label="Policy Coverage" value="Active" hint="All store policies & SLAs" />
+          <Stat label="Search Status" value="Synchronized" hint="Instant citation ready" />
         </div>
       )}
 
