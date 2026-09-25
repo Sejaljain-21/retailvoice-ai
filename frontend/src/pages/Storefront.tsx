@@ -566,7 +566,7 @@ export function Storefront() {
                     Sign in to book this product
                   </p>
                   <p className="mt-1 text-xs text-amber-700">
-                    Sign in with the demo customer account to test live order booking, tracking, and cancellation.
+                    Sign in to your account to place orders, track shipments, and request returns.
                   </p>
                   <Button
                     className="mt-3 w-full"
