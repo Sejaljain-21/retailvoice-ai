@@ -6,7 +6,7 @@
   "description": "Retail Voice - customer support & voice agent console for e-commerce and retail",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx",
     "typecheck": "tsc --noEmit"

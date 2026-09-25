@@ -152,6 +152,7 @@ export interface Order {
   currency: string
   shipping_address: string
   shipping_city: string | null
+  shipping_pincode?: string | null
   placed_at: string | null
   expected_delivery: string | null
   delivered_at: string | null

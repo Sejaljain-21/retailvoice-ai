@@ -83,8 +83,8 @@ export function CardHeader({
 
 /* ------------------------------------------------------------------- Badge */
 export function Badge({
-  children, className, dot = false,
-}: { children: ReactNode; className?: string; dot?: boolean }) {
+  children, className, dot = false, variant,
+}: { children: ReactNode; className?: string; dot?: boolean; variant?: string }) {
   return (
     <span className={cn('chip', className ?? 'bg-ink-100 text-ink-600 ring-ink-500/20')}>
       {dot && <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />}

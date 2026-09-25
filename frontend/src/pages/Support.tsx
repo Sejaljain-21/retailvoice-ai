@@ -1,8 +1,8 @@
 import {
-  AlertCircle, ArrowRight, Bot, CheckCircle2, ChevronRight, Clock,
-  ExternalLink, Headphones, HelpCircle, Layers,
-  Mic, Package, Play, Radio, RotateCcw, ShieldAlert, ShieldCheck, Sparkles,
-  Store, Tag, Truck, UserCheck, UserCog, Volume2, Wallet, Wrench, Zap,
+  ArrowRight, Bot, ChevronRight, Clock,
+  Headphones,
+  Mic, Package, Play, RotateCcw, ShieldCheck, Sparkles,
+  Store, Tag, Truck, UserCheck, UserCog, Volume2, Wrench, Zap,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
