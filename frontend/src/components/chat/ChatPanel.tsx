@@ -156,21 +156,73 @@ export function ChatPanel({ variant = 'page', className }: ChatPanelProps) {
         ))}
 
         {busy && (
-          <div className="flex items-center gap-3 animate-fade-up">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-white">
-              <Bot className="h-4 w-4" />
+          <div className="flex flex-col gap-2 rounded-2xl border border-violet-400/40 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-3.5 text-white shadow-[0_0_25px_rgba(139,92,246,0.25)] animate-fade-up">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="relative flex h-6 w-6 items-center justify-center rounded-lg bg-violet-600 text-white shadow-xs">
+                  <Bot className="h-3.5 w-3.5" />
+                  <span className="absolute inset-0 rounded-lg bg-violet-400/40 animate-pulse-ring" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    Live Autonomous Tool Execution
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono text-violet-300 bg-violet-500/20 px-2 py-0.5 rounded-full border border-violet-400/30">
+                {stage === 'using_tool' ? 'Step 2/3: Executing' : stage === 'writing' ? 'Step 3/3: Synthesizing' : 'Step 1/3: Reasoning'}
+              </span>
             </div>
-            <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-ink-200 bg-white px-4 py-3">
+
+            {/* Step-by-Step Agent Reasoning Badges */}
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              <div className={cn(
+                'flex items-center gap-1.5 rounded-lg p-1.5 text-[10px] font-medium border transition',
+                stage === 'thinking'
+                  ? 'border-violet-400/60 bg-violet-500/20 text-white'
+                  : 'border-white/10 bg-white/5 text-slate-300'
+              )}>
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="truncate">1. Ingest Intent</span>
+              </div>
+
+              <div className={cn(
+                'flex items-center gap-1.5 rounded-lg p-1.5 text-[10px] font-medium border transition',
+                stage === 'using_tool'
+                  ? 'border-violet-400/80 bg-violet-600/30 text-violet-200 shadow-[0_0_15px_rgba(139,92,246,0.3)]'
+                  : stage === 'writing'
+                    ? 'border-white/10 bg-white/5 text-slate-300'
+                    : 'border-white/5 bg-white/5 text-slate-400'
+              )}>
+                <span className={cn('h-1.5 w-1.5 rounded-full', stage === 'using_tool' ? 'bg-violet-400 animate-pulse' : 'bg-slate-400')} />
+                <span className="truncate">{activeTool ? titleCase(activeTool) : '2. System Verify'}</span>
+              </div>
+
+              <div className={cn(
+                'flex items-center gap-1.5 rounded-lg p-1.5 text-[10px] font-medium border transition',
+                stage === 'writing'
+                  ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-200'
+                  : 'border-white/5 bg-white/5 text-slate-400'
+              )}>
+                <span className={cn('h-1.5 w-1.5 rounded-full', stage === 'writing' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400')} />
+                <span className="truncate">3. Final Reply</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-0.5 text-xs text-slate-300">
               <span className="flex gap-1" aria-hidden>
                 {[0, 1, 2].map((i) => (
                   <span
                     key={i}
-                    className="h-1.5 w-1.5 animate-blink rounded-full bg-brand-500"
+                    className="h-1.5 w-1.5 animate-blink rounded-full bg-violet-400"
                     style={{ animationDelay: `${i * 0.18}s` }}
                   />
                 ))}
               </span>
-              <span className="text-xs text-ink-500">{stageLabel}</span>
+              <span className="text-[11px] text-slate-200 font-medium">
+                {stageLabel}
+              </span>
             </div>
           </div>
         )}

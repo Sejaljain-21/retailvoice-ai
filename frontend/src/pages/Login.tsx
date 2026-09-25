@@ -66,8 +66,8 @@ export function Login() {
             An AI support agent that actually knows your orders.
           </h1>
           <p className="mt-4 text-sm leading-relaxed text-ink-300">
-            Chat and voice support for e-commerce and retail. Every answer about an order,
-            a price or a policy comes from a live tool call — never from model memory.
+            Intelligent voice and chat support for retail. Every answer about an order,
+            delivery, or policy is verified in real time against live store records.
           </p>
 
           <ul className="mt-8 space-y-4">

@@ -1,6 +1,6 @@
 import {
-  BarChart3, BookOpen, Bot, ChevronDown, LifeBuoy, LogOut, MessageSquare, MessagesSquare,
-  Menu, Mic, Package, Store, Ticket, X,
+  BarChart3, BookOpen, Bot, ChevronDown, Headphones, LifeBuoy, LogOut, MessageSquare, MessagesSquare,
+  Menu, Mic, Package, Radio, Sparkles, Store, Ticket, X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -23,18 +23,18 @@ interface NavItem {
   authOnly?: boolean
 }
 
-const SHOP_NAV: NavItem[] = [
-  { to: '/', label: 'Storefront', icon: Store },
-  { to: '/support', label: 'Get support', icon: LifeBuoy },
-  { to: '/orders', label: 'My orders', icon: Package, authOnly: true },
-  { to: '/help', label: 'Help centre', icon: BookOpen },
+const AGENT_NAV: NavItem[] = [
+  { to: '/', label: 'Voice & Support Studio', icon: Mic },
+  { to: '/store', label: 'Retail Sandbox (Catalog)', icon: Store },
+  { to: '/orders', label: 'My Orders & Returns', icon: Package, authOnly: true },
+  { to: '/help', label: 'Knowledge & Policies', icon: BookOpen },
 ]
 
 const CONSOLE_NAV: NavItem[] = [
-  { to: '/console/conversations', label: 'Conversations', icon: MessagesSquare, staffOnly: true },
-  { to: '/console/tickets', label: 'Tickets', icon: Ticket, staffOnly: true },
-  { to: '/console/knowledge', label: 'Knowledge base', icon: BookOpen, staffOnly: true },
-  { to: '/console/analytics', label: 'Analytics', icon: BarChart3, staffOnly: true },
+  { to: '/console/conversations', label: 'Omnichannel Logs', icon: MessagesSquare, staffOnly: true },
+  { to: '/console/tickets', label: 'Supervisor Tickets', icon: Ticket, staffOnly: true },
+  { to: '/console/knowledge', label: 'Knowledge Base & FAQ', icon: BookOpen, staffOnly: true },
+  { to: '/console/analytics', label: 'Support Analytics', icon: BarChart3, staffOnly: true },
 ]
 
 export function AppShell() {
@@ -86,13 +86,16 @@ export function AppShell() {
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex items-center gap-2.5 px-5 py-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white">
+        <div className="flex items-center gap-3 px-5 py-5 border-b border-ink-800">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-brand-600 to-violet-500 text-white shadow-md">
             <Bot className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-white">Retail Voice</p>
-            <p className="truncate text-[11px] text-ink-400">NovaMart support</p>
+            <p className="truncate text-sm font-bold text-white tracking-wide">Retail Voice</p>
+            <p className="truncate text-[11px] font-medium text-brand-300 flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              AI Voice & Support Agent
+            </p>
           </div>
           <button
             className="ml-auto text-ink-400 lg:hidden"
@@ -103,18 +106,18 @@ export function AppShell() {
           </button>
         </div>
 
-        <nav className="flex-1 space-y-6 overflow-y-auto scroll-thin px-3 pb-4">
+        <nav className="flex-1 space-y-6 overflow-y-auto scroll-thin px-3 py-4">
           <div className="space-y-1">
-            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-500">
-              Shop
+            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
+              AI Voice & Support
             </p>
-            {renderNav(SHOP_NAV)}
+            {renderNav(AGENT_NAV)}
           </div>
 
           {staff && (
             <div className="space-y-1">
-              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-500">
-                Agent console
+              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
+                Supervisor Console
               </p>
               {renderNav(CONSOLE_NAV)}
             </div>
@@ -176,18 +179,65 @@ export function AppShell() {
         />
       )}
 
-      {/* Main */}
+      {/* Main Content Area */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center gap-3 border-b border-ink-200 bg-white px-4 lg:hidden">
-          <button onClick={() => setOpen(true)} aria-label="Open navigation">
-            <Menu className="h-5 w-5 text-ink-600" />
-          </button>
-          <span className="text-sm font-semibold text-ink-900">Retail Voice</span>
-          {capabilities?.llm.provider === 'mock' && (
-            <Badge className="ml-auto bg-amber-100 text-amber-700 ring-amber-600/20">
-              offline mode
-            </Badge>
-          )}
+        {/* Unified Top Platform Header Bar */}
+        <header className="flex h-16 items-center justify-between border-b border-ink-200/80 bg-white/90 px-4 sm:px-6 backdrop-blur-md sticky top-0 z-20 shadow-xs">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setOpen(true)}
+              aria-label="Open navigation"
+              className="rounded-lg p-1.5 text-ink-600 hover:bg-ink-100 lg:hidden"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-600 lg:hidden">
+                <Bot className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-sm sm:text-base font-bold text-ink-900 tracking-tight">
+                    {location.pathname === '/'
+                      ? 'AI Voice & Support Studio'
+                      : location.pathname === '/store'
+                        ? 'Retail Sandbox & Catalog'
+                        : location.pathname.startsWith('/console')
+                          ? 'Supervisor Console'
+                          : location.pathname === '/orders'
+                            ? 'Customer Orders & Returns'
+                            : 'Retail Voice'}
+                  </h1>
+                  <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/20">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Aura Live
+                  </span>
+                </div>
+                <p className="hidden md:block text-[11px] text-ink-500">
+                  Instant Voice & Chat Assistance · Real-Time Order & Return Resolution
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {capabilities?.llm.provider === 'mock' && (
+              <Badge className="bg-amber-100 text-amber-700 ring-amber-600/20">
+                offline mode
+              </Badge>
+            )}
+
+            {/* Quick 1-Click Voice Call Button in Header */}
+            <button
+              onClick={() => setVoiceCallOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-600 to-violet-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:from-brand-700 hover:to-violet-700 active:scale-95"
+            >
+              <Headphones className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Start Voice Session</span>
+              <span className="sm:hidden">Voice Call</span>
+            </button>
+          </div>
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto scroll-thin bg-ink-50">
@@ -198,8 +248,8 @@ export function AppShell() {
       {/* Global Voice Call Modal */}
       <VoiceCall open={voiceCallOpen} onClose={() => setVoiceCallOpen(false)} />
 
-      {/* Floating Audio & Chat Action Bar (available on all pages except /support) */}
-      {location.pathname !== '/support' && (
+      {/* Floating Audio & Chat Action Bar (available on sandbox and console pages) */}
+      {location.pathname !== '/' && (
         <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3">
           {chatOpen && (
             <div className="h-[560px] w-[380px] max-w-[calc(100vw-2.5rem)] animate-fade-up overflow-hidden rounded-xl border border-ink-200 bg-white shadow-2xl">
